@@ -1,0 +1,35 @@
+name: Expiration Alerts
+
+on:
+  schedule:
+    - cron: '0 9 * * *'  # Daily at 9am UTC
+  repository_dispatch:
+    types: [test-notification]
+  workflow_dispatch:
+
+jobs:
+  check-expiry:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Run Expiry Checker
+        env:
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          SMTP_FROM: ${{ secrets.SMTP_FROM }}
+          IS_TEST: ${{ github.event_name == 'repository_dispatch' && 'true' || 'false' }}
+          TEST_MESSAGE: ${{ github.event.client_payload.message }}
+        run: node .github/scripts/check-expiry.js
