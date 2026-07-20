@@ -1,26 +1,24 @@
 import axios from 'axios';
 import { generateVapidKeys } from './vapid';
 
-const TOKEN_KEY = 'foodex_github_token';
+const PAT_KEY = 'foodex_github_pat';
 const USERNAME_KEY = 'foodex_github_username';
-
-// The data repo is always {username}/foodex-data (private, auto-created)
 const DATA_REPO_NAME = 'foodex-data';
 
 class GitHubClient {
   constructor() {
-    this.token = localStorage.getItem(TOKEN_KEY) || '';
+    this.pat = localStorage.getItem(PAT_KEY) || '';
     this.username = localStorage.getItem(USERNAME_KEY) || '';
     this.client = null;
     this.initClient();
   }
 
   initClient() {
-    if (this.token) {
+    if (this.pat) {
       this.client = axios.create({
         baseURL: 'https://api.github.com',
         headers: {
-          Authorization: `token ${this.token}`,
+          Authorization: `token ${this.pat}`,
           Accept: 'application/vnd.github.v3+json',
         },
       });
@@ -29,22 +27,15 @@ class GitHubClient {
     }
   }
 
-  /**
-   * Called after Device Flow succeeds — stores the OAuth token, discovers
-   * the username, and auto-creates the foodex-data repo if needed.
-   */
-  async setToken(token) {
-    this.token = token;
-    localStorage.setItem(TOKEN_KEY, token);
+  async setPat(pat) {
+    this.pat = pat;
+    localStorage.setItem(PAT_KEY, pat);
     this.initClient();
 
     // Discover authenticated username
     const userRes = await this.client.get('/user');
     this.username = userRes.data.login;
     localStorage.setItem(USERNAME_KEY, this.username);
-
-    // Derive the data repo path
-    this.repo = `${this.username}/${DATA_REPO_NAME}`;
   }
 
   get repo() {
@@ -52,13 +43,13 @@ class GitHubClient {
     return '';
   }
 
-  // repo setter is a no-op (kept for compatibility)
+  // no-op setter
   set repo(_) {}
 
   clearCredentials() {
-    localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(PAT_KEY);
     localStorage.removeItem(USERNAME_KEY);
-    this.token = '';
+    this.pat = '';
     this.username = '';
     this.client = null;
   }
