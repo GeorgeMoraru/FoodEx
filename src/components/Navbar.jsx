@@ -19,7 +19,6 @@ export default function Navbar({ currentTab, setCurrentTab, darkMode, setDarkMod
 
   const menuItems = [
     { value: 'dashboard', label: 'Dashboard' },
-    { value: 'inventory', label: 'Inventory' },
     { value: 'settings', label: 'Settings' }
   ];
 

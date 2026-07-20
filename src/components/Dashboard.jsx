@@ -1,23 +1,56 @@
-import { 
-  Add as AddIcon, Warning as WarningIcon, 
-  Cancel as CancelIcon, Kitchen as KitchenIcon,
-  Close as CloseIcon
-} from '@mui/icons-material';
+import React, { useMemo, useState } from 'react';
 import { 
   Box, Grid, Paper, Typography, Card, CardContent, 
   Button, useTheme, Collapse, List, ListItem, 
-  ListItemText, ListItemAvatar, Avatar, Chip, IconButton
+  Divider, IconButton, Chip
 } from '@mui/material';
+import { 
+  Add as AddIcon, Warning as WarningIcon, 
+  Cancel as CancelIcon, Kitchen as KitchenIcon,
+  CheckCircle as CheckIcon, Edit as EditIcon,
+  DeleteForever as DeleteIcon
+} from '@mui/icons-material';
 import { 
   PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip,
   BarChart, Bar, XAxis, YAxis, CartesianGrid
 } from 'recharts';
+import dbClient from '../utils/dbClient';
 
-import React, { useMemo, useState } from 'react';
-
-export default function Dashboard({ products, settings, onAddProductClick }) {
-  const [expandedSection, setExpandedSection] = useState(null); // 'active', 'expiring', 'expired', or null
+export default function Dashboard({ products, settings, onAddProductClick, onEditProduct, onRefresh }) {
+  const [expandedCard, setExpandedCard] = useState(null); // 'active', 'expiring', 'expired', or null
   const theme = useTheme();
+
+  const handleUpdateStatus = async (productId, status) => {
+    try {
+      await dbClient.updateDb((db) => {
+        const prod = db.products.find(p => p.id === productId);
+        if (prod) {
+          prod.status = status;
+        }
+        return db;
+      });
+      onRefresh();
+    } catch (err) {
+      console.error('Update status error:', err);
+      alert('Failed to update product status');
+    }
+  };
+
+  const handleDeleteProduct = async (productId) => {
+    if (!window.confirm('Are you sure you want to delete this product?')) {
+      return;
+    }
+    try {
+      await dbClient.updateDb((db) => {
+        db.products = db.products.filter(p => p.id !== productId);
+        return db;
+      });
+      onRefresh();
+    } catch (err) {
+      console.error('Delete product error:', err);
+      alert('Failed to delete product');
+    }
+  };
 
   const stats = useMemo(() => {
     const active = products.filter(p => p.status === 'ACTIVE' || !p.status);
@@ -26,7 +59,8 @@ export default function Dashboard({ products, settings, onAddProductClick }) {
 
     const now = new Date();
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const threeDaysFromNow = new Date(todayStart.getTime() + 3 * 24 * 60 * 60 * 1000);
+    const daysBefore = parseInt(settings.notificationDaysBefore) || 3;
+    const warningLimit = new Date(todayStart.getTime() + daysBefore * 24 * 60 * 60 * 1000);
 
     let expiredCount = 0;
     let expiringSoonCount = 0;
@@ -44,7 +78,7 @@ export default function Dashboard({ products, settings, onAddProductClick }) {
         
         if (expDateStart < todayStart) {
           expiredCount++;
-        } else if (expDateStart <= threeDaysFromNow) {
+        } else if (expDateStart <= warningLimit) {
           expiringSoonCount++;
         }
       }
@@ -94,7 +128,7 @@ export default function Dashboard({ products, settings, onAddProductClick }) {
       items: item.count
     }));
 
-    // Sort lists to ensure Expiring Soon is always first
+    // Sort lists to ensure Expiring Soonest is always first
     const sortedActive = [...active].sort((a, b) => {
       if (!a.expirationDate && !b.expirationDate) return 0;
       if (!a.expirationDate) return 1;
@@ -107,7 +141,7 @@ export default function Dashboard({ products, settings, onAddProductClick }) {
         if (!p.expirationDate) return false;
         const expDate = new Date(p.expirationDate);
         const expDateStart = new Date(expDate.getFullYear(), expDate.getMonth(), expDate.getDate());
-        return expDateStart >= todayStart && expDateStart <= threeDaysFromNow;
+        return expDateStart >= todayStart && expDateStart <= warningLimit;
       })
       .sort((a, b) => new Date(a.expirationDate) - new Date(b.expirationDate));
 
@@ -131,7 +165,7 @@ export default function Dashboard({ products, settings, onAddProductClick }) {
       sortedExpiringSoon,
       sortedExpired
     };
-  }, [products, theme]);
+  }, [products, settings.notificationDaysBefore, theme]);
 
   const getFoodEmoji = (name) => {
     const n = name.toLowerCase();
@@ -176,13 +210,115 @@ export default function Dashboard({ products, settings, onAddProductClick }) {
 
   const PIE_COLORS = [theme.palette.primary.main, theme.palette.secondary.main, '#e67e22'];
 
+  const renderExpandedList = (items) => {
+    if (items.length === 0) {
+      return (
+        <Typography variant="body2" color="text.secondary" align="center" sx={{ py: 3 }}>
+          No items in this section.
+        </Typography>
+      );
+    }
+
+    return (
+      <List sx={{ width: '100%', maxHeight: 350, overflowY: 'auto', p: 0 }}>
+        {items.map((p) => {
+          const badge = getExpirationBadgeInfo(p.expirationDate);
+          return (
+            <ListItem 
+              key={p.id} 
+              divider
+              sx={{ 
+                display: 'flex', 
+                flexDirection: 'column', 
+                alignItems: 'stretch', 
+                py: 1.5, 
+                px: 2,
+                '&:hover': { bgcolor: 'action.hover' }
+              }}
+            >
+              {/* Product Info Row */}
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+                <Typography sx={{ fontSize: '1.5rem' }}>{getFoodEmoji(p.name)}</Typography>
+                <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+                  <Typography variant="subtitle2" noWrap sx={{ fontWeight: 'bold', fontSize: '0.85rem' }}>
+                    {p.name}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary" noWrap display="block">
+                    {p.quantity} {p.unit} • {p.location}
+                  </Typography>
+                </Box>
+                <Chip 
+                  label={badge.text} 
+                  size="small"
+                  sx={{ 
+                    bgcolor: badge.color, 
+                    color: '#ffffff', 
+                    fontSize: '0.65rem',
+                    fontWeight: 'bold',
+                    height: 20
+                  }} 
+                />
+              </Box>
+
+              {/* Actions & Dates Row */}
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mt: 0.5 }}>
+                <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.7rem' }}>
+                  {p.expirationDate ? `Exp: ${new Date(p.expirationDate).toLocaleDateString()}` : 'No Expiration'}
+                </Typography>
+                
+                <Box sx={{ display: 'flex', gap: 0.5 }}>
+                  <Tooltip title="Consume">
+                    <IconButton 
+                      size="small" 
+                      onClick={() => handleUpdateStatus(p.id, 'CONSUMED')} 
+                      sx={{ color: 'success.main', p: 0.5 }}
+                    >
+                      <CheckIcon fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                  <Tooltip title="Waste">
+                    <IconButton 
+                      size="small" 
+                      onClick={() => handleUpdateStatus(p.id, 'WASTED')} 
+                      sx={{ color: 'warning.main', p: 0.5 }}
+                    >
+                      <CancelIcon fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                  <Tooltip title="Edit">
+                    <IconButton 
+                      size="small" 
+                      onClick={() => onEditProduct(p)} 
+                      sx={{ color: 'info.main', p: 0.5 }}
+                    >
+                      <EditIcon fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                  <Tooltip title="Delete">
+                    <IconButton 
+                      size="small" 
+                      onClick={() => handleDeleteProduct(p.id)} 
+                      sx={{ color: 'error.main', p: 0.5 }}
+                    >
+                      <DeleteIcon fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                </Box>
+              </Box>
+            </ListItem>
+          );
+        })}
+      </List>
+    );
+  };
+
   return (
     <Box sx={{ p: 1 }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4, flexWrap: 'wrap', gap: 2 }}>
         <Box>
           <Typography variant="h4" sx={{ fontWeight: 'bold' }}>Dashboard</Typography>
           <Typography variant="body1" color="text.secondary">
-            Overview of your food inventory
+            Overview and management of your food inventory
           </Typography>
         </Box>
         <Button 
@@ -195,145 +331,120 @@ export default function Dashboard({ products, settings, onAddProductClick }) {
         </Button>
       </Box>
 
-      {/* Summary Cards */}
-      <Grid container spacing={3} sx={{ mb: 4 }}>
+      {/* Summary Cards with Inline Expansions */}
+      <Grid container spacing={3} sx={{ mb: 4 }} alignItems="flex-start">
+        {/* Card 1: Active Items */}
         <Grid item xs={12} sm={4}>
           <Card 
-            onClick={() => setExpandedSection(expandedSection === 'active' ? null : 'active')}
             sx={{ 
               bgcolor: 'background.paper', 
               borderLeft: '6px solid', 
               borderColor: 'primary.main',
-              cursor: 'pointer',
-              transition: 'transform 0.2s, box-shadow 0.2s',
-              '&:hover': { transform: 'translateY(-2px)', boxShadow: 4 }
+              height: 'auto',
+              borderRadius: 3
             }}
           >
-            <CardContent sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <CardContent 
+              onClick={() => setExpandedCard(expandedCard === 'active' ? null : 'active')}
+              sx={{ 
+                display: 'flex', 
+                alignItems: 'center', 
+                justifyContent: 'space-between',
+                cursor: 'pointer',
+                userSelect: 'none',
+                '&:hover': { bgcolor: 'action.hover' }
+              }}
+            >
               <Box>
-                <Typography variant="subtitle2" color="text.secondary">Active Items</Typography>
+                <Typography variant="subtitle2" color="text.secondary" sx={{ fontWeight: 'bold' }}>Active Items</Typography>
                 <Typography variant="h3" sx={{ fontWeight: 'bold', mt: 1 }}>{stats.totalActive}</Typography>
               </Box>
               <KitchenIcon color="primary" sx={{ fontSize: 40, opacity: 0.8 }} />
             </CardContent>
+            
+            <Collapse in={expandedCard === 'active'}>
+              <Divider />
+              {renderExpandedList(stats.sortedActive)}
+            </Collapse>
           </Card>
         </Grid>
 
+        {/* Card 2: Expiring Soon */}
         <Grid item xs={12} sm={4}>
           <Card 
-            onClick={() => setExpandedSection(expandedSection === 'expiring' ? null : 'expiring')}
             sx={{ 
               bgcolor: 'background.paper', 
               borderLeft: '6px solid', 
               borderColor: 'warning.main',
-              cursor: 'pointer',
-              transition: 'transform 0.2s, box-shadow 0.2s',
-              '&:hover': { transform: 'translateY(-2px)', boxShadow: 4 }
+              height: 'auto',
+              borderRadius: 3
             }}
           >
-            <CardContent sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <CardContent 
+              onClick={() => setExpandedCard(expandedCard === 'expiring' ? null : 'expiring')}
+              sx={{ 
+                display: 'flex', 
+                alignItems: 'center', 
+                justifyContent: 'space-between',
+                cursor: 'pointer',
+                userSelect: 'none',
+                '&:hover': { bgcolor: 'action.hover' }
+              }}
+            >
               <Box>
-                <Typography variant="subtitle2" color="text.secondary">Expiring Soon (3 days)</Typography>
+                <Typography variant="subtitle2" color="text.secondary" sx={{ fontWeight: 'bold' }}>Expiring Soon</Typography>
                 <Typography variant="h3" sx={{ fontWeight: 'bold', mt: 1, color: stats.expiringSoon > 0 ? 'warning.main' : 'inherit' }}>
                   {stats.expiringSoon}
                 </Typography>
               </Box>
               <WarningIcon color="warning" sx={{ fontSize: 40, opacity: 0.8 }} />
             </CardContent>
+
+            <Collapse in={expandedCard === 'expiring'}>
+              <Divider />
+              {renderExpandedList(stats.sortedExpiringSoon)}
+            </Collapse>
           </Card>
         </Grid>
 
+        {/* Card 3: Expired Items */}
         <Grid item xs={12} sm={4}>
           <Card 
-            onClick={() => setExpandedSection(expandedSection === 'expired' ? null : 'expired')}
             sx={{ 
               bgcolor: 'background.paper', 
               borderLeft: '6px solid', 
               borderColor: 'error.main',
-              cursor: 'pointer',
-              transition: 'transform 0.2s, box-shadow 0.2s',
-              '&:hover': { transform: 'translateY(-2px)', boxShadow: 4 }
+              height: 'auto',
+              borderRadius: 3
             }}
           >
-            <CardContent sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <CardContent 
+              onClick={() => setExpandedCard(expandedCard === 'expired' ? null : 'expired')}
+              sx={{ 
+                display: 'flex', 
+                alignItems: 'center', 
+                justifyContent: 'space-between',
+                cursor: 'pointer',
+                userSelect: 'none',
+                '&:hover': { bgcolor: 'action.hover' }
+              }}
+            >
               <Box>
-                <Typography variant="subtitle2" color="text.secondary">Expired Items</Typography>
+                <Typography variant="subtitle2" color="text.secondary" sx={{ fontWeight: 'bold' }}>Expired Items</Typography>
                 <Typography variant="h3" sx={{ fontWeight: 'bold', mt: 1, color: stats.expired > 0 ? 'error.main' : 'inherit' }}>
                   {stats.expired}
                 </Typography>
               </Box>
               <CancelIcon color="error" sx={{ fontSize: 40, opacity: 0.8 }} />
             </CardContent>
+
+            <Collapse in={expandedCard === 'expired'}>
+              <Divider />
+              {renderExpandedList(stats.sortedExpired)}
+            </Collapse>
           </Card>
         </Grid>
       </Grid>
-
-      {/* Expanded items list Collapse */}
-      <Collapse in={expandedSection !== null} sx={{ mb: 4 }}>
-        {expandedSection && (
-          <Paper sx={{ p: 3, borderRadius: 4, position: 'relative' }}>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-              <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
-                {expandedSection === 'active' && 'Active Items (Expiring soonest first)'}
-                {expandedSection === 'expiring' && 'Items Expiring Soon (3 days or less)'}
-                {expandedSection === 'expired' && 'Expired Items'}
-              </Typography>
-              <IconButton size="small" onClick={() => setExpandedSection(null)}>
-                <CloseIcon />
-              </IconButton>
-            </Box>
-
-            <List sx={{ width: '100%', bgcolor: 'background.paper', maxHeight: 300, overflowY: 'auto', borderRadius: 2 }}>
-              {((expandedSection === 'active' && stats.sortedActive) ||
-                (expandedSection === 'expiring' && stats.sortedExpiringSoon) ||
-                (expandedSection === 'expired' && stats.sortedExpired)
-              ).map((p) => {
-                const badge = getExpirationBadgeInfo(p.expirationDate);
-                return (
-                  <ListItem 
-                    key={p.id} 
-                    divider
-                    sx={{
-                      '&:hover': { bgcolor: 'action.hover' },
-                      borderRadius: 1,
-                      px: 2
-                    }}
-                  >
-                    <ListItemAvatar>
-                      <Avatar sx={{ bgcolor: 'transparent', fontSize: '1.8rem' }}>
-                        {getFoodEmoji(p.name)}
-                      </Avatar>
-                    </ListItemAvatar>
-                    <ListItemText
-                      primary={p.name}
-                      secondary={`Quantity: ${p.quantity} ${p.unit} | Location: ${p.location}`}
-                    />
-                    <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-                      <Chip 
-                        label={badge.text} 
-                        sx={{ 
-                          bgcolor: badge.color, 
-                          color: '#ffffff',
-                          fontWeight: 'bold',
-                          fontSize: '0.75rem'
-                        }} 
-                      />
-                    </Box>
-                  </ListItem>
-                );
-              })}
-              {((expandedSection === 'active' && stats.sortedActive.length === 0) ||
-                (expandedSection === 'expiring' && stats.sortedExpiringSoon.length === 0) ||
-                (expandedSection === 'expired' && stats.sortedExpired.length === 0)
-              ) && (
-                <Typography variant="body2" color="text.secondary" align="center" sx={{ py: 3 }}>
-                  No items found in this section.
-                </Typography>
-              )}
-            </List>
-          </Paper>
-        )}
-      </Collapse>
 
       {/* Charts Section */}
       <Grid container spacing={4}>
