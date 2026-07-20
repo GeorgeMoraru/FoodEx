@@ -1,18 +1,22 @@
-import React, { useMemo } from 'react';
-import { 
-  Box, Grid, Paper, Typography, Card, CardContent, 
-  Button, useTheme 
-} from '@mui/material';
 import { 
   Add as AddIcon, Warning as WarningIcon, 
-  Cancel as CancelIcon, Kitchen as KitchenIcon
+  Cancel as CancelIcon, Kitchen as KitchenIcon,
+  Close as CloseIcon
 } from '@mui/icons-material';
+import { 
+  Box, Grid, Paper, Typography, Card, CardContent, 
+  Button, useTheme, Collapse, List, ListItem, 
+  ListItemText, ListItemAvatar, Avatar, Chip, IconButton
+} from '@mui/material';
 import { 
   PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip,
   BarChart, Bar, XAxis, YAxis, CartesianGrid
 } from 'recharts';
 
+import React, { useMemo, useState } from 'react';
+
 export default function Dashboard({ products, settings, onAddProductClick }) {
+  const [expandedSection, setExpandedSection] = useState(null); // 'active', 'expiring', 'expired', or null
   const theme = useTheme();
 
   const stats = useMemo(() => {
@@ -90,15 +94,85 @@ export default function Dashboard({ products, settings, onAddProductClick }) {
       items: item.count
     }));
 
+    // Sort lists to ensure Expiring Soon is always first
+    const sortedActive = [...active].sort((a, b) => {
+      if (!a.expirationDate && !b.expirationDate) return 0;
+      if (!a.expirationDate) return 1;
+      if (!b.expirationDate) return -1;
+      return new Date(a.expirationDate) - new Date(b.expirationDate);
+    });
+
+    const sortedExpiringSoon = [...active]
+      .filter(p => {
+        if (!p.expirationDate) return false;
+        const expDate = new Date(p.expirationDate);
+        const expDateStart = new Date(expDate.getFullYear(), expDate.getMonth(), expDate.getDate());
+        return expDateStart >= todayStart && expDateStart <= threeDaysFromNow;
+      })
+      .sort((a, b) => new Date(a.expirationDate) - new Date(b.expirationDate));
+
+    const sortedExpired = [...active]
+      .filter(p => {
+        if (!p.expirationDate) return false;
+        const expDate = new Date(p.expirationDate);
+        const expDateStart = new Date(expDate.getFullYear(), expDate.getMonth(), expDate.getDate());
+        return expDateStart < todayStart;
+      })
+      .sort((a, b) => new Date(a.expirationDate) - new Date(b.expirationDate));
+
     return {
       totalActive: active.length,
       expired: expiredCount,
       expiringSoon: expiringSoonCount,
       locationData,
       wastedConsumedData,
-      upcomingExpirations
+      upcomingExpirations,
+      sortedActive,
+      sortedExpiringSoon,
+      sortedExpired
     };
   }, [products, theme]);
+
+  const getFoodEmoji = (name) => {
+    const n = name.toLowerCase();
+    if (n.includes('milk') || n.includes('cream')) return '🥛';
+    if (n.includes('egg')) return '🥚';
+    if (n.includes('cheese') || n.includes('yogurt') || n.includes('butter')) return '🧀';
+    if (n.includes('chicken') || n.includes('turkey') || n.includes('poultry')) return '🍗';
+    if (n.includes('beef') || n.includes('steak') || n.includes('pork') || n.includes('meat')) return '🥩';
+    if (n.includes('fish') || n.includes('salmon') || n.includes('tuna') || n.includes('seafood') || n.includes('shrimp')) return '🐟';
+    if (n.includes('apple') || n.includes('fruit') || n.includes('banana') || n.includes('strawberry') || n.includes('berry') || n.includes('grapes') || n.includes('orange') || n.includes('lemon')) return '🍎';
+    if (n.includes('spinach') || n.includes('salad') || n.includes('lettuce') || n.includes('broccoli') || n.includes('cabbage') || n.includes('carrot') || n.includes('vegetable') || n.includes('pepper') || n.includes('onion') || n.includes('garlic')) return '🥦';
+    if (n.includes('bread') || n.includes('loaf') || n.includes('toast') || n.includes('dough') || n.includes('tortilla')) return '🍞';
+    if (n.includes('rice') || n.includes('pasta') || n.includes('grain') || n.includes('oats')) return '🍚';
+    if (n.includes('beer') || n.includes('wine') || n.includes('soda') || n.includes('juice') || n.includes('coffee') || n.includes('tea')) return '🍹';
+    return '🥗';
+  };
+
+  const getExpirationBadgeInfo = (dateString) => {
+    if (!dateString) {
+      return { text: 'Non-perishable', color: theme.palette.grey[600] };
+    }
+    const expDate = new Date(dateString);
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const expDateStart = new Date(expDate.getFullYear(), expDate.getMonth(), expDate.getDate());
+    
+    const timeDiff = expDateStart.getTime() - todayStart.getTime();
+    const daysDiff = Math.ceil(timeDiff / (1000 * 3600 * 24));
+
+    if (daysDiff < 0) {
+      return { text: `Expired ${Math.abs(daysDiff)} day(s) ago`, color: theme.palette.error.main };
+    } else if (daysDiff === 0) {
+      return { text: 'Expires today', color: '#d32f2f' };
+    } else if (daysDiff === 1) {
+      return { text: 'Expires tomorrow', color: '#ef6c00' };
+    } else if (daysDiff <= 3) {
+      return { text: `Expires in ${daysDiff} days`, color: '#fbc02d' };
+    } else {
+      return { text: `Expires in ${daysDiff} days`, color: theme.palette.success.main };
+    }
+  };
 
   const PIE_COLORS = [theme.palette.primary.main, theme.palette.secondary.main, '#e67e22'];
 
@@ -124,7 +198,17 @@ export default function Dashboard({ products, settings, onAddProductClick }) {
       {/* Summary Cards */}
       <Grid container spacing={3} sx={{ mb: 4 }}>
         <Grid item xs={12} sm={4}>
-          <Card sx={{ bgcolor: 'background.paper', borderLeft: '6px solid', borderColor: 'primary.main' }}>
+          <Card 
+            onClick={() => setExpandedSection(expandedSection === 'active' ? null : 'active')}
+            sx={{ 
+              bgcolor: 'background.paper', 
+              borderLeft: '6px solid', 
+              borderColor: 'primary.main',
+              cursor: 'pointer',
+              transition: 'transform 0.2s, box-shadow 0.2s',
+              '&:hover': { transform: 'translateY(-2px)', boxShadow: 4 }
+            }}
+          >
             <CardContent sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <Box>
                 <Typography variant="subtitle2" color="text.secondary">Active Items</Typography>
@@ -136,7 +220,17 @@ export default function Dashboard({ products, settings, onAddProductClick }) {
         </Grid>
 
         <Grid item xs={12} sm={4}>
-          <Card sx={{ bgcolor: 'background.paper', borderLeft: '6px solid', borderColor: 'warning.main' }}>
+          <Card 
+            onClick={() => setExpandedSection(expandedSection === 'expiring' ? null : 'expiring')}
+            sx={{ 
+              bgcolor: 'background.paper', 
+              borderLeft: '6px solid', 
+              borderColor: 'warning.main',
+              cursor: 'pointer',
+              transition: 'transform 0.2s, box-shadow 0.2s',
+              '&:hover': { transform: 'translateY(-2px)', boxShadow: 4 }
+            }}
+          >
             <CardContent sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <Box>
                 <Typography variant="subtitle2" color="text.secondary">Expiring Soon (3 days)</Typography>
@@ -150,7 +244,17 @@ export default function Dashboard({ products, settings, onAddProductClick }) {
         </Grid>
 
         <Grid item xs={12} sm={4}>
-          <Card sx={{ bgcolor: 'background.paper', borderLeft: '6px solid', borderColor: 'error.main' }}>
+          <Card 
+            onClick={() => setExpandedSection(expandedSection === 'expired' ? null : 'expired')}
+            sx={{ 
+              bgcolor: 'background.paper', 
+              borderLeft: '6px solid', 
+              borderColor: 'error.main',
+              cursor: 'pointer',
+              transition: 'transform 0.2s, box-shadow 0.2s',
+              '&:hover': { transform: 'translateY(-2px)', boxShadow: 4 }
+            }}
+          >
             <CardContent sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <Box>
                 <Typography variant="subtitle2" color="text.secondary">Expired Items</Typography>
@@ -163,6 +267,73 @@ export default function Dashboard({ products, settings, onAddProductClick }) {
           </Card>
         </Grid>
       </Grid>
+
+      {/* Expanded items list Collapse */}
+      <Collapse in={expandedSection !== null} sx={{ mb: 4 }}>
+        {expandedSection && (
+          <Paper sx={{ p: 3, borderRadius: 4, position: 'relative' }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+              <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
+                {expandedSection === 'active' && 'Active Items (Expiring soonest first)'}
+                {expandedSection === 'expiring' && 'Items Expiring Soon (3 days or less)'}
+                {expandedSection === 'expired' && 'Expired Items'}
+              </Typography>
+              <IconButton size="small" onClick={() => setExpandedSection(null)}>
+                <CloseIcon />
+              </IconButton>
+            </Box>
+
+            <List sx={{ width: '100%', bgcolor: 'background.paper', maxHeight: 300, overflowY: 'auto', borderRadius: 2 }}>
+              {((expandedSection === 'active' && stats.sortedActive) ||
+                (expandedSection === 'expiring' && stats.sortedExpiringSoon) ||
+                (expandedSection === 'expired' && stats.sortedExpired)
+              ).map((p) => {
+                const badge = getExpirationBadgeInfo(p.expirationDate);
+                return (
+                  <ListItem 
+                    key={p.id} 
+                    divider
+                    sx={{
+                      '&:hover': { bgcolor: 'action.hover' },
+                      borderRadius: 1,
+                      px: 2
+                    }}
+                  >
+                    <ListItemAvatar>
+                      <Avatar sx={{ bgcolor: 'transparent', fontSize: '1.8rem' }}>
+                        {getFoodEmoji(p.name)}
+                      </Avatar>
+                    </ListItemAvatar>
+                    <ListItemText
+                      primary={p.name}
+                      secondary={`Quantity: ${p.quantity} ${p.unit} | Location: ${p.location}`}
+                    />
+                    <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                      <Chip 
+                        label={badge.text} 
+                        sx={{ 
+                          bgcolor: badge.color, 
+                          color: '#ffffff',
+                          fontWeight: 'bold',
+                          fontSize: '0.75rem'
+                        }} 
+                      />
+                    </Box>
+                  </ListItem>
+                );
+              })}
+              {((expandedSection === 'active' && stats.sortedActive.length === 0) ||
+                (expandedSection === 'expiring' && stats.sortedExpiringSoon.length === 0) ||
+                (expandedSection === 'expired' && stats.sortedExpired.length === 0)
+              ) && (
+                <Typography variant="body2" color="text.secondary" align="center" sx={{ py: 3 }}>
+                  No items found in this section.
+                </Typography>
+              )}
+            </List>
+          </Paper>
+        )}
+      </Collapse>
 
       {/* Charts Section */}
       <Grid container spacing={4}>
