@@ -10,10 +10,14 @@ service cloud.firestore {
         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.householdId == resource.data.householdId;
     }
     
-    // Households can only be read/written if the user is a member of that household
+    // Households can be read/written if:
+    // 1. It is the user's own default household (ID matches their UID) - bypasses DB lookup to prevent race conditions on first sign-in.
+    // 2. The user's profile document has householdId matching the household.
     match /households/{householdId} {
-      allow read, write: if request.auth != null && 
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.householdId == householdId;
+      allow read, write: if request.auth != null && (
+        householdId == request.auth.uid ||
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.householdId == householdId
+      );
     }
     
     // Home Assistant tokens are unguessable UUIDs. 
