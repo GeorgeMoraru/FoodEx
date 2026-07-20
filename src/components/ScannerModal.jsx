@@ -198,14 +198,20 @@ export default function ScannerModal({ open, onClose, onDateScanned }) {
     const canvas = canvasRef.current;
     const ctx = canvas.getContext('2d');
 
-    // Match canvas size to video aspect ratio
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
+    // Define source crop dimensions (center 60% width, 30% height)
+    const sWidth = video.videoWidth * 0.6;
+    const sHeight = video.videoHeight * 0.3;
+    const sx = (video.videoWidth - sWidth) / 2;
+    const sy = (video.videoHeight - sHeight) / 2;
 
-    // Draw video frame to canvas
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    // Match canvas size to the cropped region size
+    canvas.width = sWidth;
+    canvas.height = sHeight;
 
-    // Apply basic grayscale processing to help OCR while maintaining text edge smooth gradients
+    // Draw only the cropped center region of the video frame to the canvas
+    ctx.drawImage(video, sx, sy, sWidth, sHeight, 0, 0, sWidth, sHeight);
+
+    // Apply basic grayscale processing on the cropped region to help OCR
     const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
     const data = imgData.data;
     for (let i = 0; i < data.length; i += 4) {
@@ -292,10 +298,10 @@ export default function ScannerModal({ open, onClose, onDateScanned }) {
           {/* Alignment Finder Grid Overlay */}
           <Box sx={{
             position: 'absolute',
-            top: '25%',
-            left: '10%',
-            width: '80%',
-            height: '50%',
+            top: '35%',
+            left: '20%',
+            width: '60%',
+            height: '30%',
             border: '2px dashed #ffffff',
             boxShadow: '0 0 0 9999px rgba(0, 0, 0, 0.5)',
             zIndex: 5,
