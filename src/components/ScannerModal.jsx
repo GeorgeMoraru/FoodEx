@@ -57,18 +57,37 @@ export default function ScannerModal({ open, onClose, onDateScanned }) {
     return () => stopCamera();
   }, [open]);
 
-  // Robust date parser regexes
+  // Robust date parser with OCR digit correction and two-segment date support
   const extractDate = (text) => {
     const normalized = text.toLowerCase().replace(/\s+/g, ' ');
     
-    // Pattern 1: DD/MM/YYYY or MM/DD/YYYY or DD.MM.YYYY or DD-MM-YYYY (Separators: / . - en-dash)
-    const pattern1 = /\b(\d{1,2})[\/\.\-–\s](\d{1,2})[\/\.\-–\s](\d{2,4})\b/g;
+    // Character substitution helper to correct common OCR typos in date segments
+    const cleanGroup = (str) => {
+      return str
+        .replace(/[oO]/g, '0')
+        .replace(/[iIl|]/g, '1')
+        .replace(/[sS]/g, '5')
+        .replace(/[bB]/g, '8')
+        .replace(/[gG]/g, '9');
+    };
+
+    // Character set class representing digits (including common OCR typos)
+    const dClass = '[0-9iIl|sSbBgG]';
+
+    // Helper to calculate the last day of a month
+    const getLastDayOfMonth = (year, month) => {
+      return new Date(year, month, 0).getDate(); // 0th day of next month is last day of current
+    };
+
+    // Pattern 1: DD/MM/YYYY or MM/DD/YYYY (with standard separators)
+    const pattern1 = new RegExp(`\\b(${dClass}{1,2})[\\/\\.\\-–\\s](${dClass}{1,2})[\\/\\.\\-–\\s](${dClass}{2,4})\\b`, 'g');
     let match;
     while ((match = pattern1.exec(normalized)) !== null) {
-      let d = parseInt(match[1]);
-      let m = parseInt(match[2]);
-      let y = parseInt(match[3]);
+      let d = parseInt(cleanGroup(match[1]));
+      let m = parseInt(cleanGroup(match[2]));
+      let y = parseInt(cleanGroup(match[3]));
       
+      if (isNaN(d) || isNaN(m) || isNaN(y)) continue;
       if (y < 100) y += 2000; // Assume 21st century
 
       // Swap day/month if month is out of bounds
@@ -84,17 +103,45 @@ export default function ScannerModal({ open, onClose, onDateScanned }) {
     }
 
     // Pattern 2: YYYY-MM-DD
-    const pattern2 = /\b(\d{4})[\/\.\-–\s](\d{1,2})[\/\.\-–\s](\d{1,2})\b/g;
+    const pattern2 = new RegExp(`\\b(${dClass}{4})[\\/\\.\\-–\\s](${dClass}{1,2})[\\/\\.\\-–\\s](${dClass}{1,2})\\b`, 'g');
     while ((match = pattern2.exec(normalized)) !== null) {
-      const y = parseInt(match[1]);
-      const m = parseInt(match[2]);
-      const d = parseInt(match[3]);
+      const y = parseInt(cleanGroup(match[1]));
+      const m = parseInt(cleanGroup(match[2]));
+      const d = parseInt(cleanGroup(match[3]));
+      
+      if (isNaN(d) || isNaN(m) || isNaN(y)) continue;
       if (m >= 1 && m <= 12 && d >= 1 && d <= 31) {
         return new Date(y, m - 1, d);
       }
     }
 
-    // Pattern 3: Text Month, e.g. "15 Sep 2026" or "15 Dec 2026" or "15 Iul 2026"
+    // Pattern 3: MM/YYYY or MM.YYYY (common for shelf-stable items, e.g., 09.2026 or 12/2027)
+    const patternMMYYYY = new RegExp(`\\b(${dClass}{1,2})[\\/\\.\\-–](${dClass}{4})\\b`, 'g');
+    while ((match = patternMMYYYY.exec(normalized)) !== null) {
+      const m = parseInt(cleanGroup(match[1]));
+      let y = parseInt(cleanGroup(match[2]));
+
+      if (isNaN(m) || isNaN(y)) continue;
+      if (m >= 1 && m <= 12 && y >= 2000 && y <= 2100) {
+        const lastDay = getLastDayOfMonth(y, m);
+        return new Date(y, m - 1, lastDay);
+      }
+    }
+
+    // Pattern 4: YYYY/MM or YYYY.MM
+    const patternYYYYMM = new RegExp(`\\b(${dClass}{4})[\\/\\.\\-–](${dClass}{1,2})\\b`, 'g');
+    while ((match = patternYYYYMM.exec(normalized)) !== null) {
+      let y = parseInt(cleanGroup(match[1]));
+      const m = parseInt(cleanGroup(match[2]));
+
+      if (isNaN(m) || isNaN(y)) continue;
+      if (m >= 1 && m <= 12 && y >= 2000 && y <= 2100) {
+        const lastDay = getLastDayOfMonth(y, m);
+        return new Date(y, m - 1, lastDay);
+      }
+    }
+
+    // Pattern 5: Text Month, e.g. "15 Sep 2026" or "15 Dec 2026" or "15 Iul 2026"
     const months = {
       jan: 0, ian: 0,
       feb: 1,
@@ -155,16 +202,14 @@ export default function ScannerModal({ open, onClose, onDateScanned }) {
     // Draw video frame to canvas
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-    // Apply basic image processing to help OCR (grayscale + contrast)
+    // Apply basic grayscale processing to help OCR while maintaining text edge smooth gradients
     const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
     const data = imgData.data;
     for (let i = 0; i < data.length; i += 4) {
-      const brightness = 0.34 * data[i] + 0.5 * data[i + 1] + 0.16 * data[i + 2];
-      // Simple threshold contrast enhancement
-      const val = brightness > 125 ? 255 : 0;
-      data[i] = val;
-      data[i+1] = val;
-      data[i+2] = val;
+      const grayscale = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+      data[i] = grayscale;
+      data[i+1] = grayscale;
+      data[i+2] = grayscale;
     }
     ctx.putImageData(imgData, 0, 0);
 
