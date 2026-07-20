@@ -1,3 +1,61 @@
+const CACHE_NAME = 'foodex-v2';
+const STATIC_ASSETS = [
+  '/',
+  '/index.html',
+  '/foodkeeper.json',
+  '/manifest.json'
+];
+
+self.addEventListener('install', (event) => {
+  event.waitUntil(
+    caches.open(CACHE_NAME).then((cache) => {
+      return cache.addAll(STATIC_ASSETS);
+    })
+  );
+  self.skipWaiting();
+});
+
+self.addEventListener('activate', (event) => {
+  event.waitUntil(
+    caches.keys().then((cacheNames) => {
+      return Promise.all(
+        cacheNames
+          .filter((name) => name !== CACHE_NAME)
+          .map((name) => caches.delete(name))
+      );
+    })
+  );
+  self.clients.claim();
+});
+
+self.addEventListener('fetch', (event) => {
+  if (event.request.method !== 'GET') return;
+  // Don't cache API requests or external image resources
+  if (event.request.url.includes('firestore.googleapis.com') || event.request.url.includes('wikipedia.org')) return;
+
+  event.respondWith(
+    caches.match(event.request).then((cachedResponse) => {
+      if (cachedResponse) {
+        return cachedResponse;
+      }
+      return fetch(event.request).then((networkResponse) => {
+        return caches.open(CACHE_NAME).then((cache) => {
+          // Cache successful responses for our domain
+          if (networkResponse.ok && event.request.url.startsWith(self.location.origin)) {
+            cache.put(event.request, networkResponse.clone());
+          }
+          return networkResponse;
+        });
+      });
+    }).catch(() => {
+      // Fallback for offline if not in cache (e.g., return cached index for SPA routing)
+      if (event.request.mode === 'navigate') {
+        return caches.match('/');
+      }
+    })
+  );
+});
+
 self.addEventListener('push', (event) => {
   let data = { title: 'FoodEx Alert', body: 'Check your food inventory!' };
   
