@@ -11,7 +11,7 @@ import {
   LocalMall as PantryIcon, AcUnit as FreezerIcon, 
   Info as InfoIcon 
 } from '@mui/icons-material';
-import gitHubClient from '../utils/gitHubClient';
+import dbClient from '../utils/dbClient';
 
 export default function Inventory({ products, onEditProduct, onAddProductClick, onRefresh }) {
   // Search & Filter State
@@ -46,13 +46,12 @@ export default function Inventory({ products, onEditProduct, onAddProductClick, 
     }
     
     try {
-      // Delete image from repository uploads directory if it exists
       if (prodToDelete.imagePath) {
-        await gitHubClient.deleteImage(prodToDelete.imagePath);
+        // External URLs or deleted logic
       }
 
       // Remove from database
-      await gitHubClient.updateDb((db) => {
+      await dbClient.updateDb((db) => {
         db.products = db.products.filter(p => p.id !== productId);
         return db;
       });
