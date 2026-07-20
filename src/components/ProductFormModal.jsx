@@ -40,7 +40,7 @@ export default function ProductFormModal({ open, onClose, product, settings, onS
 
   // Load foodkeeper data from public/foodkeeper.json on mount
   useEffect(() => {
-    fetch('/foodkeeper.json')
+    fetch('foodkeeper.json')
       .then(res => res.json())
       .then(data => setFoodkeeper(data))
       .catch(err => console.error('Failed to load foodkeeper database:', err));
