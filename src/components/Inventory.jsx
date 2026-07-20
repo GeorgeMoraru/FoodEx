@@ -169,6 +169,247 @@ export default function Inventory({ products, settings, onEditProduct, onAddProd
     return result;
   }, [products, tabValue, locationFilter, search]);
 
+  // Group active items for structured visual sections on Active tab
+  const groupedActiveProducts = useMemo(() => {
+    const expiringSoon = [];
+    const expired = [];
+    const fresh = [];
+
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const daysBefore = parseInt(settings.notificationDaysBefore) || 3;
+    const warningLimit = new Date(todayStart.getTime() + daysBefore * 24 * 60 * 60 * 1000);
+
+    filteredProducts.forEach(p => {
+      if (tabValue === 1) {
+        fresh.push(p); // History Log stays in a single list
+        return;
+      }
+
+      if (!p.expirationDate) {
+        fresh.push(p);
+        return;
+      }
+
+      const expDate = new Date(p.expirationDate);
+      const expDateStart = new Date(expDate.getFullYear(), expDate.getMonth(), expDate.getDate());
+
+      if (expDateStart < todayStart) {
+        expired.push(p);
+      } else if (expDateStart <= warningLimit) {
+        expiringSoon.push(p);
+      } else {
+        fresh.push(p);
+      }
+    });
+
+    return { expiringSoon, expired, fresh };
+  }, [filteredProducts, tabValue, settings.notificationDaysBefore]);
+
+  const renderCard = (p) => {
+    const isActive = (p.status || 'ACTIVE') === 'ACTIVE';
+    const badge = getExpirationBadgeInfo(p.expirationDate);
+    return (
+      <Grid item xs={12} sm={6} md={4} lg={3} key={p.id}>
+        <Card 
+          sx={{ 
+            position: 'relative',
+            height: '100%',
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden',
+            borderRadius: 3,
+            border: '1px solid',
+            borderColor: 'divider',
+            boxShadow: 'none',
+            transition: 'transform 0.2s ease, box-shadow 0.2s ease',
+            '&:hover': {
+              transform: 'translateY(-2px)',
+              boxShadow: '0 6px 20px rgba(0,0,0,0.12)',
+            }
+          }}
+        >
+          {/* Countdown Badge overlay */}
+          {isActive && (
+            <Box 
+              sx={{ 
+                position: 'absolute', 
+                top: 12, 
+                left: 12, 
+                bgcolor: badge.color, 
+                color: badge.textColor,
+                px: 1.2,
+                py: 0.4,
+                borderRadius: 1.5,
+                fontSize: '0.7rem',
+                fontWeight: 'bold',
+                zIndex: 10,
+                boxShadow: '0 2px 4px rgba(0,0,0,0.15)'
+              }}
+            >
+              {badge.text}
+            </Box>
+          )}
+
+          {/* Location Badge overlay */}
+          <Chip 
+            icon={getLocationIcon(p.location)}
+            label={p.location} 
+            size="small"
+            sx={{ 
+              position: 'absolute', 
+              top: 12, 
+              right: 12, 
+              zIndex: 10,
+              bgcolor: theme => theme.palette.mode === 'dark' ? 'rgba(30,30,30,0.9)' : 'rgba(255,255,255,0.9)',
+              color: 'text.primary',
+              backdropFilter: 'blur(4px)',
+              fontWeight: 'bold',
+              fontSize: '0.75rem',
+              border: '1px solid',
+              borderColor: 'divider',
+              boxShadow: '0 2px 4px rgba(0,0,0,0.08)'
+            }} 
+          />
+
+          {/* Image Container */}
+          <Box sx={{ position: 'relative', width: '100%', pt: '70%', bgcolor: theme.palette.mode === 'light' ? '#eaefe8' : '#252924', overflow: 'hidden' }}>
+            {p.imageUrl ? (
+              <img 
+                src={p.imageUrl} 
+                alt={p.name} 
+                style={{ 
+                  position: 'absolute', 
+                  top: 0, 
+                  left: 0, 
+                  width: '100%', 
+                  height: '100%', 
+                  objectFit: 'cover' 
+                }}
+              />
+            ) : (
+              <Box 
+                sx={{ 
+                  position: 'absolute', 
+                  top: 0, 
+                  left: 0, 
+                  width: '100%', 
+                  height: '100%', 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  justifyContent: 'center',
+                  fontSize: '4.5rem'
+                }}
+              >
+                {getFoodEmoji(p.name)}
+              </Box>
+            )}
+          </Box>
+
+          {/* Content details */}
+          <CardContent sx={{ flexGrow: 1, p: 2, display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+            <Typography variant="h6" component="h3" noWrap sx={{ fontWeight: 'bold', fontSize: '0.95rem' }} title={p.name}>
+              {p.name}
+            </Typography>
+            
+            <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.85rem' }}>
+              Quantity: <strong>{p.quantity} {p.unit}</strong>
+            </Typography>
+
+            <Typography variant="caption" color="text.secondary" sx={{ mt: 'auto', display: 'flex', alignItems: 'center', gap: 0.5, fontSize: '0.75rem' }}>
+              <InfoIcon fontSize="inherit" />
+              {p.expirationDate ? `Expires: ${new Date(p.expirationDate).toLocaleDateString()}` : 'Does not expire'}
+            </Typography>
+
+            {!isActive && (
+              <Chip 
+                label={p.status} 
+                size="small" 
+                color={p.status === 'CONSUMED' ? 'success' : 'warning'} 
+                sx={{ mt: 1, fontWeight: 'bold', height: 22, fontSize: '0.7rem' }}
+              />
+            )}
+          </CardContent>
+
+          {/* Direct action buttons at bottom of card */}
+          <CardActions sx={{ justifyContent: 'space-between', borderTop: '1px solid', borderColor: 'divider', px: 1, py: 0.5, bgcolor: 'action.hover' }}>
+            {isActive ? (
+              <>
+                <Box sx={{ display: 'flex', gap: 0.5 }}>
+                  <Tooltip title="Consume (Mark Eaten)">
+                    <IconButton 
+                      size="small"
+                      onClick={() => handleUpdateStatus(p.id, 'CONSUMED')}
+                      sx={{ color: 'success.main', '&:hover': { bgcolor: 'rgba(46,204,113,0.1)' } }}
+                    >
+                      <CheckIcon fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+
+                  <Tooltip title="Waste (Mark Discarded)">
+                    <IconButton 
+                      size="small"
+                      onClick={() => handleUpdateStatus(p.id, 'WASTED')}
+                      sx={{ color: 'warning.main', '&:hover': { bgcolor: 'rgba(230,126,34,0.1)' } }}
+                    >
+                      <CancelIcon fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                </Box>
+                
+                <Box sx={{ display: 'flex', gap: 0.5 }}>
+                  <Tooltip title="Edit Product">
+                    <IconButton 
+                      size="small"
+                      onClick={() => onEditProduct(p)}
+                      sx={{ color: 'info.main', '&:hover': { bgcolor: 'rgba(52,152,219,0.1)' } }}
+                    >
+                      <EditIcon fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+
+                  <Tooltip title="Delete Permanently">
+                    <IconButton 
+                      size="small"
+                      onClick={() => handleDeleteProduct(p.id)}
+                      sx={{ color: 'error.main', '&:hover': { bgcolor: 'rgba(231,76,60,0.1)' } }}
+                    >
+                      <DeleteIcon fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                </Box>
+              </>
+            ) : (
+              <>
+                <Tooltip title="Restore to Active Inventory">
+                  <Button 
+                    size="small"
+                    variant="outlined"
+                    startIcon={<RestoreIcon />}
+                    onClick={() => handleUpdateStatus(p.id, 'ACTIVE')}
+                    sx={{ fontSize: '0.75rem', py: 0.2, px: 1 }}
+                  >
+                    Restore
+                  </Button>
+                </Tooltip>
+
+                <Tooltip title="Delete Permanently">
+                  <IconButton 
+                    size="small"
+                    onClick={() => handleDeleteProduct(p.id)}
+                    sx={{ color: 'error.main', '&:hover': { bgcolor: 'rgba(231,76,60,0.1)' } }}
+                  >
+                    <DeleteIcon fontSize="small" />
+                  </IconButton>
+                </Tooltip>
+              </>
+            )}
+          </CardActions>
+        </Card>
+      </Grid>
+    );
+  };
+
   return (
     <Box sx={{ p: 1 }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 2, alignItems: 'center', mb: 3 }}>
@@ -257,212 +498,49 @@ export default function Inventory({ products, settings, onEditProduct, onAddProd
             <Button variant="outlined" onClick={onAddProductClick}>Add Product</Button>
           )}
         </Paper>
-      ) : (
-        /* Native Grid Cards with direct action buttons */
-        <Grid container spacing={3}>
-          {filteredProducts.map((p) => {
-            const isActive = (p.status || 'ACTIVE') === 'ACTIVE';
-            const badge = getExpirationBadgeInfo(p.expirationDate);
-            return (
-              <Grid item xs={12} sm={6} md={4} lg={3} key={p.id}>
-                <Card 
-                  sx={{ 
-                    position: 'relative',
-                    height: '100%',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    overflow: 'hidden',
-                    borderRadius: 3,
-                    border: '1px solid',
-                    borderColor: 'divider',
-                    boxShadow: 'none',
-                    transition: 'transform 0.2s ease, box-shadow 0.2s ease',
-                    '&:hover': {
-                      transform: 'translateY(-2px)',
-                      boxShadow: '0 6px 20px rgba(0,0,0,0.12)',
-                    }
-                  }}
-                >
-                  {/* Countdown Badge overlay */}
-                  {isActive && (
-                    <Box 
-                      sx={{ 
-                        position: 'absolute', 
-                        top: 12, 
-                        left: 12, 
-                        bgcolor: badge.color, 
-                        color: badge.textColor,
-                        px: 1.2,
-                        py: 0.4,
-                        borderRadius: 1.5,
-                        fontSize: '0.7rem',
-                        fontWeight: 'bold',
-                        zIndex: 10,
-                        boxShadow: '0 2px 4px rgba(0,0,0,0.15)'
-                      }}
-                    >
-                      {badge.text}
-                    </Box>
-                  )}
-
-                  {/* Location Badge overlay */}
-                  <Chip 
-                    icon={getLocationIcon(p.location)}
-                    label={p.location} 
-                    size="small"
-                    sx={{ 
-                      position: 'absolute', 
-                      top: 12, 
-                      right: 12, 
-                      zIndex: 10,
-                      bgcolor: theme => theme.palette.mode === 'dark' ? 'rgba(30,30,30,0.9)' : 'rgba(255,255,255,0.9)',
-                      color: 'text.primary',
-                      backdropFilter: 'blur(4px)',
-                      fontWeight: 'bold',
-                      fontSize: '0.75rem',
-                      border: '1px solid',
-                      borderColor: 'divider',
-                      boxShadow: '0 2px 4px rgba(0,0,0,0.08)'
-                    }} 
-                  />
-
-                  {/* Image Container */}
-                  <Box sx={{ position: 'relative', width: '100%', pt: '70%', bgcolor: theme.palette.mode === 'light' ? '#eaefe8' : '#252924', overflow: 'hidden' }}>
-                    {p.imageUrl ? (
-                      <img 
-                        src={p.imageUrl} 
-                        alt={p.name} 
-                        style={{ 
-                          position: 'absolute', 
-                          top: 0, 
-                          left: 0, 
-                          width: '100%', 
-                          height: '100%', 
-                          objectFit: 'cover' 
-                        }}
-                      />
-                    ) : (
-                      <Box 
-                        sx={{ 
-                          position: 'absolute', 
-                          top: 0, 
-                          left: 0, 
-                          width: '100%', 
-                          height: '100%', 
-                          display: 'flex', 
-                          alignItems: 'center', 
-                          justifyContent: 'center',
-                          fontSize: '4.5rem'
-                        }}
-                      >
-                        {getFoodEmoji(p.name)}
-                      </Box>
-                    )}
-                  </Box>
-
-                  {/* Content details */}
-                  <CardContent sx={{ flexGrow: 1, p: 2, display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-                    <Typography variant="h6" component="h3" noWrap sx={{ fontWeight: 'bold', fontSize: '0.95rem' }} title={p.name}>
-                      {p.name}
-                    </Typography>
-                    
-                    <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.85rem' }}>
-                      Quantity: <strong>{p.quantity} {p.unit}</strong>
-                    </Typography>
-
-                    <Typography variant="caption" color="text.secondary" sx={{ mt: 'auto', display: 'flex', alignItems: 'center', gap: 0.5, fontSize: '0.75rem' }}>
-                      <InfoIcon fontSize="inherit" />
-                      {p.expirationDate ? `Expires: ${new Date(p.expirationDate).toLocaleDateString()}` : 'Does not expire'}
-                    </Typography>
-
-                    {!isActive && (
-                      <Chip 
-                        label={p.status} 
-                        size="small" 
-                        color={p.status === 'CONSUMED' ? 'success' : 'warning'} 
-                        sx={{ mt: 1, fontWeight: 'bold', height: 22, fontSize: '0.7rem' }}
-                      />
-                    )}
-                  </CardContent>
-
-                  {/* Directly accessible action buttons at bottom of card */}
-                  <CardActions sx={{ justifyContent: 'space-between', borderTop: '1px solid', borderColor: 'divider', px: 1, py: 0.5, bgcolor: 'action.hover' }}>
-                    {isActive ? (
-                      <>
-                        <Box sx={{ display: 'flex', gap: 0.5 }}>
-                          <Tooltip title="Consume (Mark Eaten)">
-                            <IconButton 
-                              size="small"
-                              onClick={() => handleUpdateStatus(p.id, 'CONSUMED')}
-                              sx={{ color: 'success.main', '&:hover': { bgcolor: 'rgba(46,204,113,0.1)' } }}
-                            >
-                              <CheckIcon fontSize="small" />
-                            </IconButton>
-                          </Tooltip>
-
-                          <Tooltip title="Waste (Mark Discarded)">
-                            <IconButton 
-                              size="small"
-                              onClick={() => handleUpdateStatus(p.id, 'WASTED')}
-                              sx={{ color: 'warning.main', '&:hover': { bgcolor: 'rgba(230,126,34,0.1)' } }}
-                            >
-                              <CancelIcon fontSize="small" />
-                            </IconButton>
-                          </Tooltip>
-                        </Box>
-                        
-                        <Box sx={{ display: 'flex', gap: 0.5 }}>
-                          <Tooltip title="Edit Product">
-                            <IconButton 
-                              size="small"
-                              onClick={() => onEditProduct(p)}
-                              sx={{ color: 'info.main', '&:hover': { bgcolor: 'rgba(52,152,219,0.1)' } }}
-                            >
-                              <EditIcon fontSize="small" />
-                            </IconButton>
-                          </Tooltip>
-
-                          <Tooltip title="Delete Permanently">
-                            <IconButton 
-                              size="small"
-                              onClick={() => handleDeleteProduct(p.id)}
-                              sx={{ color: 'error.main', '&:hover': { bgcolor: 'rgba(231,76,60,0.1)' } }}
-                            >
-                              <DeleteIcon fontSize="small" />
-                            </IconButton>
-                          </Tooltip>
-                        </Box>
-                      </>
-                    ) : (
-                      <>
-                        <Tooltip title="Restore to Active Inventory">
-                          <Button 
-                            size="small"
-                            variant="outlined"
-                            startIcon={<RestoreIcon />}
-                            onClick={() => handleUpdateStatus(p.id, 'ACTIVE')}
-                            sx={{ fontSize: '0.75rem', py: 0.2, px: 1 }}
-                          >
-                            Restore
-                          </Button>
-                        </Tooltip>
-
-                        <Tooltip title="Delete Permanently">
-                          <IconButton 
-                            size="small"
-                            onClick={() => handleDeleteProduct(p.id)}
-                            sx={{ color: 'error.main', '&:hover': { bgcolor: 'rgba(231,76,60,0.1)' } }}
-                          >
-                            <DeleteIcon fontSize="small" />
-                          </IconButton>
-                        </Tooltip>
-                      </>
-                    )}
-                  </CardActions>
-                </Card>
+      ) : tabValue === 0 ? (
+        /* Active Inventory split into Expiring Soon, Expired, and Fresh/Safe sections */
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          {/* 1. Expiring Soonest Section */}
+          {groupedActiveProducts.expiringSoon.length > 0 && (
+            <Box>
+              <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 2, color: 'warning.main', display: 'flex', alignItems: 'center', gap: 1 }}>
+                ⚠️ Expiring Soon
+              </Typography>
+              <Grid container spacing={3}>
+                {groupedActiveProducts.expiringSoon.map(renderCard)}
               </Grid>
-            );
-          })}
+            </Box>
+          )}
+
+          {/* 2. Expired Section */}
+          {groupedActiveProducts.expired.length > 0 && (
+            <Box>
+              <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 2, color: 'error.main', display: 'flex', alignItems: 'center', gap: 1 }}>
+                ❌ Expired Items
+              </Typography>
+              <Grid container spacing={3}>
+                {groupedActiveProducts.expired.map(renderCard)}
+              </Grid>
+            </Box>
+          )}
+
+          {/* 3. Fresh / Other Section */}
+          {groupedActiveProducts.fresh.length > 0 && (
+            <Box>
+              <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 2, color: 'success.main', display: 'flex', alignItems: 'center', gap: 1 }}>
+                🍏 Fresh & Safe Items
+              </Typography>
+              <Grid container spacing={3}>
+                {groupedActiveProducts.fresh.map(renderCard)}
+              </Grid>
+            </Box>
+          )}
+        </Box>
+      ) : (
+        /* History Logs - Flat List */
+        <Grid container spacing={3}>
+          {groupedActiveProducts.fresh.map(renderCard)}
         </Grid>
       )}
     </Box>
