@@ -79,8 +79,11 @@ export default function ScannerModal({ open, onClose, onDateScanned }) {
       return new Date(year, month, 0).getDate(); // 0th day of next month is last day of current
     };
 
-    // Pattern 1: DD/MM/YYYY or MM/DD/YYYY (with standard separators)
-    const pattern1 = new RegExp(`\\b(${dClass}{1,2})[\\/\\.\\-–\\s](${dClass}{1,2})[\\/\\.\\-–\\s](${dClass}{2,4})\\b`, 'g');
+    // Separator pattern allowing optional surrounding spaces (supporting: /, ., en-dash, and hyphen)
+    const sep = '\\s*[\\/\\.\\–-]\\s*';
+
+    // Pattern 1: DD/MM/YYYY or MM/DD/YYYY (with standard separators or spaces)
+    const pattern1 = new RegExp(`\\b(${dClass}{1,2})(${sep}|\\s+)(${dClass}{1,2})(${sep}|\\s+)(${dClass}{2,4})\\b`, 'g');
     let match;
     while ((match = pattern1.exec(normalized)) !== null) {
       let d = parseInt(cleanGroup(match[1]));
@@ -103,7 +106,7 @@ export default function ScannerModal({ open, onClose, onDateScanned }) {
     }
 
     // Pattern 2: YYYY-MM-DD
-    const pattern2 = new RegExp(`\\b(${dClass}{4})[\\/\\.\\-–\\s](${dClass}{1,2})[\\/\\.\\-–\\s](${dClass}{1,2})\\b`, 'g');
+    const pattern2 = new RegExp(`\\b(${dClass}{4})(${sep}|\\s+)(${dClass}{1,2})(${sep}|\\s+)(${dClass}{1,2})\\b`, 'g');
     while ((match = pattern2.exec(normalized)) !== null) {
       const y = parseInt(cleanGroup(match[1]));
       const m = parseInt(cleanGroup(match[2]));
@@ -116,7 +119,7 @@ export default function ScannerModal({ open, onClose, onDateScanned }) {
     }
 
     // Pattern 3: MM/YYYY or MM.YYYY (common for shelf-stable items, e.g., 09.2026 or 12/2027)
-    const patternMMYYYY = new RegExp(`\\b(${dClass}{1,2})[\\/\\.\\-–](${dClass}{4})\\b`, 'g');
+    const patternMMYYYY = new RegExp(`\\b(${dClass}{1,2})(${sep})(${dClass}{4})\\b`, 'g');
     while ((match = patternMMYYYY.exec(normalized)) !== null) {
       const m = parseInt(cleanGroup(match[1]));
       let y = parseInt(cleanGroup(match[2]));
@@ -129,7 +132,7 @@ export default function ScannerModal({ open, onClose, onDateScanned }) {
     }
 
     // Pattern 4: YYYY/MM or YYYY.MM
-    const patternYYYYMM = new RegExp(`\\b(${dClass}{4})[\\/\\.\\-–](${dClass}{1,2})\\b`, 'g');
+    const patternYYYYMM = new RegExp(`\\b(${dClass}{4})(${sep})(${dClass}{1,2})\\b`, 'g');
     while ((match = patternYYYYMM.exec(normalized)) !== null) {
       let y = parseInt(cleanGroup(match[1]));
       const m = parseInt(cleanGroup(match[2]));
