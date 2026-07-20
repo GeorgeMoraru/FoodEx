@@ -30,13 +30,15 @@ export default function Dashboard({ products, onAddProductClick }) {
     const locationCounts = { Fridge: 0, Pantry: 0, Freezer: 0 };
     
     active.forEach(p => {
-      const expDate = new Date(p.expirationDate);
-      const expDateStart = new Date(expDate.getFullYear(), expDate.getMonth(), expDate.getDate());
-      
-      if (expDateStart < todayStart) {
-        expiredCount++;
-      } else if (expDateStart <= threeDaysFromNow) {
-        expiringSoonCount++;
+      if (p.expirationDate) {
+        const expDate = new Date(p.expirationDate);
+        const expDateStart = new Date(expDate.getFullYear(), expDate.getMonth(), expDate.getDate());
+        
+        if (expDateStart < todayStart) {
+          expiredCount++;
+        } else if (expDateStart <= threeDaysFromNow) {
+          expiringSoonCount++;
+        }
       }
 
       const loc = p.location || 'Fridge';
@@ -66,6 +68,7 @@ export default function Dashboard({ products, onAddProductClick }) {
     }
 
     active.forEach(p => {
+      if (!p.expirationDate) return;
       const expDate = new Date(p.expirationDate);
       const expDateStart = new Date(expDate.getFullYear(), expDate.getMonth(), expDate.getDate());
       

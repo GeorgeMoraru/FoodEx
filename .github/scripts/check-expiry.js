@@ -48,6 +48,7 @@ async function main() {
     products.forEach(p => {
       const status = p.status || 'ACTIVE';
       if (status !== 'ACTIVE') return;
+      if (!p.expirationDate) return;
       
       const expDate = new Date(p.expirationDate);
       const expDateStart = new Date(expDate.getFullYear(), expDate.getMonth(), expDate.getDate());

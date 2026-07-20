@@ -88,7 +88,11 @@ export default function ProductFormModal({ open, onClose, product, onSuccess }) 
     setName(selectedName);
     if (!selectedName || isEdit || expirationDate !== '') return;
 
-    const match = foodkeeper.find(f => f.name.toLowerCase() === selectedName.toLowerCase());
+    const match = foodkeeper.find(f => {
+      const lowerF = f.name.toLowerCase();
+      const lowerS = selectedName.toLowerCase().trim();
+      return lowerF === lowerS || lowerF.split('/').some(part => part.trim() === lowerS);
+    });
     if (match) {
       if (match.defaultLocation) {
         setLocation(match.defaultLocation);
@@ -181,10 +185,6 @@ export default function ProductFormModal({ open, onClose, product, onSuccess }) 
 
     if (!name.trim()) {
       setError('Product name is required');
-      return;
-    }
-    if (!expirationDate) {
-      setError('Expiration date is required');
       return;
     }
 
@@ -364,10 +364,9 @@ export default function ProductFormModal({ open, onClose, product, onSuccess }) 
               <Grid item xs={12} sm={6}>
                 <Box sx={{ display: 'flex', gap: 1 }}>
                   <TextField
-                    required
                     fullWidth
                     type="date"
-                    label="Expiration Date"
+                    label="Expiration Date (Optional)"
                     InputLabelProps={{ shrink: true }}
                     value={expirationDate}
                     onChange={(e) => setExpirationDate(e.target.value)}

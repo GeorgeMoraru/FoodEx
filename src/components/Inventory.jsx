@@ -91,6 +91,13 @@ export default function Inventory({ products, onEditProduct, onAddProductClick, 
 
   // Expiration countdown calculations
   const getExpirationBadgeInfo = (dateString) => {
+    if (!dateString) {
+      return {
+        text: 'Non-perishable',
+        color: theme.palette.grey[600],
+        textColor: '#ffffff'
+      };
+    }
     const expDate = new Date(dateString);
     const now = new Date();
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -156,8 +163,13 @@ export default function Inventory({ products, onEditProduct, onAddProductClick, 
       result = result.filter(p => p.name.toLowerCase().includes(query));
     }
 
-    // Sort by expiration date (earliest first)
-    result.sort((a, b) => new Date(a.expirationDate) - new Date(b.expirationDate));
+    // Sort by expiration date (earliest first), put non-perishables at the end
+    result.sort((a, b) => {
+      if (!a.expirationDate && !b.expirationDate) return 0;
+      if (!a.expirationDate) return 1;
+      if (!b.expirationDate) return -1;
+      return new Date(a.expirationDate) - new Date(b.expirationDate);
+    });
 
     return result;
   }, [products, statusFilter, locationFilter, search]);
@@ -425,7 +437,7 @@ export default function Inventory({ products, onEditProduct, onAddProductClick, 
 
                     <Typography variant="caption" color="text.secondary" sx={{ mt: 'auto', display: 'flex', alignItems: 'center', gap: 0.5 }}>
                       <InfoIcon fontSize="inherit" />
-                      Expires: {new Date(p.expirationDate).toLocaleDateString()}
+                      {p.expirationDate ? `Expires: ${new Date(p.expirationDate).toLocaleDateString()}` : 'Does not expire'}
                     </Typography>
 
                     {!isActive && (
