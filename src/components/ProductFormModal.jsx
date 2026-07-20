@@ -11,7 +11,7 @@ import {
 import dbClient from '../utils/dbClient';
 import ScannerModal from './ScannerModal';
 
-export default function ProductFormModal({ open, onClose, product, onSuccess }) {
+export default function ProductFormModal({ open, onClose, product, settings, onSuccess }) {
   const isEdit = !!product;
 
   const [name, setName] = useState('');
