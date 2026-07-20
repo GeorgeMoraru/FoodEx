@@ -2,7 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   Modal, Box, Typography, TextField, Button, Grid, 
   Select, MenuItem, FormControl, InputLabel, CircularProgress, 
-  Alert, IconButton, Card, CardMedia, useTheme, Tooltip, Autocomplete
+  Alert, IconButton, Card, CardMedia, useTheme, Tooltip, Autocomplete,
+  Fade
 } from '@mui/material';
 import { 
   Close as CloseIcon, CameraAlt as CameraIcon, 
@@ -212,189 +213,191 @@ export default function ProductFormModal({ open, onClose, product, settings, onS
   return (
     <>
       <Modal open={open} onClose={onClose} aria-labelledby="product-form-title">
-        <Box sx={{
-          position: 'absolute',
-          top: '50%',
-          left: '50%',
-          transform: 'translate(-50%, -50%)',
-          width: { xs: '95%', sm: 600 },
-          maxHeight: '90vh',
-          bgcolor: 'background.paper',
-          borderRadius: 4,
-          boxShadow: 24,
-          overflowY: 'auto',
-          outline: 'none'
-        }}>
-          {/* Header */}
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', p: 3, borderBottom: '1px solid', borderColor: 'divider' }}>
-            <Typography id="product-form-title" variant="h5" sx={{ fontWeight: 'bold' }}>
-              {isEdit ? 'Edit Product' : 'Add Product'}
-            </Typography>
-            <IconButton onClick={onClose}>
-              <CloseIcon />
-            </IconButton>
-          </Box>
+        <Fade in={open}>
+          <Box sx={{
+            position: 'absolute',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)',
+            width: { xs: '95%', sm: 600 },
+            maxHeight: '90vh',
+            bgcolor: 'background.paper',
+            borderRadius: '4px',
+            boxShadow: 24,
+            overflowY: 'auto',
+            outline: 'none'
+          }}>
+            {/* Header */}
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', p: 3, borderBottom: '1px solid', borderColor: 'divider' }}>
+              <Typography id="product-form-title" variant="h5" sx={{ fontWeight: 'bold' }}>
+                {isEdit ? 'Edit Product' : 'Add Product'}
+              </Typography>
+              <IconButton onClick={onClose}>
+                <CloseIcon />
+              </IconButton>
+            </Box>
 
-          {/* Form */}
-          <Box component="form" onSubmit={handleSubmit} sx={{ p: 3 }}>
-            {error && <Alert severity="error" sx={{ mb: 3 }}>{error}</Alert>}
+            {/* Form */}
+            <Box component="form" onSubmit={handleSubmit} sx={{ p: 3 }}>
+              {error && <Alert severity="error" sx={{ mb: 3 }}>{error}</Alert>}
 
-            <Grid container spacing={3}>
-              {/* Product Name (Autocomplete from FoodKeeper) */}
-              <Grid item xs={12}>
-                <Autocomplete
-                  freeSolo
-                  options={foodkeeper.map(f => f.name)}
-                  value={name}
-                  onChange={(event, newValue) => handleFoodkeeperSelect(newValue || '')}
-                  onInputChange={(event, newInputValue) => setName(newInputValue)}
-                  renderInput={(params) => (
-                    <TextField
-                      {...params}
-                      required
-                      label="Product Name (e.g. Milk)"
-                      onBlur={handleNameBlur}
-                      helperText="Type to see suggestions. Auto-calculates storage and shelf life."
-                    />
-                  )}
-                />
-              </Grid>
+              <Grid container spacing={3}>
+                {/* Product Name (Autocomplete from FoodKeeper) */}
+                <Grid item xs={12}>
+                  <Autocomplete
+                    freeSolo
+                    options={foodkeeper.map(f => f.name)}
+                    value={name}
+                    onChange={(event, newValue) => handleFoodkeeperSelect(newValue || '')}
+                    onInputChange={(event, newInputValue) => setName(newInputValue)}
+                    renderInput={(params) => (
+                      <TextField
+                        {...params}
+                        required
+                        label="Product Name (e.g. Milk)"
+                        onBlur={handleNameBlur}
+                        helperText="Type to see suggestions. Auto-calculates storage and shelf life."
+                      />
+                    )}
+                  />
+                </Grid>
 
-              {/* Quantity and Unit */}
-              <Grid item xs={6}>
-                <TextField
-                  required
-                  fullWidth
-                  type="number"
-                  inputProps={{ min: '0.01', step: 'any' }}
-                  label="Quantity"
-                  value={quantity}
-                  onChange={(e) => setQuantity(e.target.value)}
-                />
-              </Grid>
-              <Grid item xs={6}>
-                <FormControl fullWidth>
-                  <InputLabel>Unit</InputLabel>
-                  <Select
-                    value={unit}
-                    label="Unit"
-                    onChange={(e) => setUnit(e.target.value)}
-                  >
-                    <MenuItem value="pcs">pcs (pieces)</MenuItem>
-                    <MenuItem value="pack">pack</MenuItem>
-                    <MenuItem value="bottle">bottle</MenuItem>
-                    <MenuItem value="can">can</MenuItem>
-                    <MenuItem value="g">g (grams)</MenuItem>
-                    <MenuItem value="kg">kg (kilograms)</MenuItem>
-                    <MenuItem value="ml">ml (milliliters)</MenuItem>
-                    <MenuItem value="liter">liter</MenuItem>
-                    <MenuItem value="oz">oz (ounces)</MenuItem>
-                  </Select>
-                </FormControl>
-              </Grid>
+                {/* Quantity and Unit */}
+                <Grid item xs={6}>
+                  <TextField
+                    required
+                    fullWidth
+                    type="number"
+                    inputProps={{ min: '0.01', step: 'any' }}
+                    label="Quantity"
+                    value={quantity}
+                    onChange={(e) => setQuantity(e.target.value)}
+                  />
+                </Grid>
+                <Grid item xs={6}>
+                  <FormControl fullWidth>
+                    <InputLabel>Unit</InputLabel>
+                    <Select
+                      value={unit}
+                      label="Unit"
+                      onChange={(e) => setUnit(e.target.value)}
+                    >
+                      <MenuItem value="pcs">pcs (pieces)</MenuItem>
+                      <MenuItem value="pack">pack</MenuItem>
+                      <MenuItem value="bottle">bottle</MenuItem>
+                      <MenuItem value="can">can</MenuItem>
+                      <MenuItem value="g">g (grams)</MenuItem>
+                      <MenuItem value="kg">kg (kilograms)</MenuItem>
+                      <MenuItem value="ml">ml (milliliters)</MenuItem>
+                      <MenuItem value="liter">liter</MenuItem>
+                      <MenuItem value="oz">oz (ounces)</MenuItem>
+                    </Select>
+                  </FormControl>
+                </Grid>
 
-              {/* Storage Location */}
-              <Grid item xs={12}>
-                <FormControl fullWidth>
-                  <InputLabel>Storage Location</InputLabel>
-                  <Select
-                    value={location}
-                    label="Storage Location"
-                    onChange={(e) => setLocation(e.target.value)}
-                  >
-                    {locationsList.map((loc) => (
-                      <MenuItem key={loc} value={loc}>{loc}</MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-              </Grid>
+                {/* Storage Location */}
+                <Grid item xs={12}>
+                  <FormControl fullWidth>
+                    <InputLabel>Storage Location</InputLabel>
+                    <Select
+                      value={location}
+                      label="Storage Location"
+                      onChange={(e) => setLocation(e.target.value)}
+                    >
+                      {locationsList.map((loc) => (
+                        <MenuItem key={loc} value={loc}>{loc}</MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                </Grid>
 
-              {/* Dates */}
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  fullWidth
-                  type="date"
-                  label="Date Added"
-                  InputLabelProps={{ shrink: true }}
-                  value={addedDate}
-                  onChange={(e) => setAddedDate(e.target.value)}
-                />
-              </Grid>
-              <Grid item xs={12} sm={6}>
-                <Box sx={{ display: 'flex', gap: 1 }}>
+                {/* Dates */}
+                <Grid item xs={12} sm={6}>
                   <TextField
                     fullWidth
                     type="date"
-                    label="Expiration Date (Optional)"
+                    label="Date Added"
                     InputLabelProps={{ shrink: true }}
-                    value={expirationDate}
-                    onChange={(e) => setExpirationDate(e.target.value)}
+                    value={addedDate}
+                    onChange={(e) => setAddedDate(e.target.value)}
                   />
-                  <Tooltip title="Scan Expiration Date using Camera">
-                    <IconButton 
-                      color="secondary" 
-                      onClick={() => setScannerOpen(true)}
-                      sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2 }}
-                    >
-                      <ScannerIcon />
-                    </IconButton>
-                  </Tooltip>
-                </Box>
-              </Grid>
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <Box sx={{ display: 'flex', gap: 1 }}>
+                    <TextField
+                      fullWidth
+                      type="date"
+                      label="Expiration Date (Optional)"
+                      InputLabelProps={{ shrink: true }}
+                      value={expirationDate}
+                      onChange={(e) => setExpirationDate(e.target.value)}
+                    />
+                    <Tooltip title="Scan Expiration Date using Camera">
+                      <IconButton 
+                        color="secondary" 
+                        onClick={() => setScannerOpen(true)}
+                        sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2 }}
+                      >
+                        <ScannerIcon />
+                      </IconButton>
+                    </Tooltip>
+                  </Box>
+                </Grid>
 
-              {/* Product Picture Auto-generated */}
-              <Grid item xs={12}>
-                <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 'bold' }}>
-                  Product Image
-                </Typography>
-                
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                  {imagePreview ? (
-                    <Card variant="outlined" sx={{ borderRadius: 2, overflow: 'hidden', width: 100, height: 100 }}>
-                      <CardMedia
-                        component="img"
-                        height="100"
-                        image={imagePreview}
-                        alt="Product Image"
-                        sx={{ objectFit: 'cover' }}
-                      />
-                    </Card>
-                  ) : (
-                    <Box sx={{ 
-                      width: 100, 
-                      height: 100, 
-                      border: '1px dashed', 
-                      borderColor: 'divider', 
-                      borderRadius: 2, 
-                      display: 'flex', 
-                      alignItems: 'center', 
-                      justifyContent: 'center',
-                      color: 'text.secondary',
-                      fontSize: '0.75rem',
-                      textAlign: 'center',
-                      p: 1
-                    }}>
-                      Type a name to fetch image
-                    </Box>
-                  )}
-                  <Typography variant="caption" color="text.secondary">
-                    Product image is automatically fetched from Wikipedia based on the food name.
+                {/* Product Picture Auto-generated */}
+                <Grid item xs={12}>
+                  <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 'bold' }}>
+                    Product Image
                   </Typography>
-                </Box>
+                  
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                    {imagePreview ? (
+                      <Card variant="outlined" sx={{ borderRadius: 2, overflow: 'hidden', width: 100, height: 100 }}>
+                        <CardMedia
+                          component="img"
+                          height="100"
+                          image={imagePreview}
+                          alt="Product Image"
+                          sx={{ objectFit: 'cover' }}
+                        />
+                      </Card>
+                    ) : (
+                      <Box sx={{ 
+                        width: 100, 
+                        height: 100, 
+                        border: '1px dashed', 
+                        borderColor: 'divider', 
+                        borderRadius: 2, 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        justifyContent: 'center',
+                        color: 'text.secondary',
+                        fontSize: '0.75rem',
+                        textAlign: 'center',
+                        p: 1
+                      }}>
+                        Type a name to fetch image
+                      </Box>
+                    )}
+                    <Typography variant="caption" color="text.secondary">
+                      Product image is automatically fetched from Wikipedia based on the food name.
+                    </Typography>
+                  </Box>
+                </Grid>
               </Grid>
-            </Grid>
 
-            {/* Actions */}
-            <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 2, mt: 4, borderTop: '1px solid', borderColor: 'divider', pt: 3 }}>
-              <Button onClick={onClose} variant="outlined" disabled={loading}>
-                Cancel
-              </Button>
-              <Button type="submit" variant="contained" disabled={loading}>
-                {loading ? <CircularProgress size={24} color="inherit" /> : (isEdit ? 'Save Changes' : 'Add Product')}
-              </Button>
+              {/* Actions */}
+              <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 2, mt: 4, borderTop: '1px solid', borderColor: 'divider', pt: 3 }}>
+                <Button onClick={onClose} variant="outlined" disabled={loading}>
+                  Cancel
+                </Button>
+                <Button type="submit" variant="contained" disabled={loading}>
+                  {loading ? <CircularProgress size={24} color="inherit" /> : (isEdit ? 'Save Changes' : 'Add Product')}
+                </Button>
+              </Box>
             </Box>
           </Box>
-        </Box>
+        </Fade>
       </Modal>
 
       {/* Embedded OCR Expiration Date Scanner */}

@@ -329,51 +329,14 @@ export default function Dashboard({ products, settings, onAddProductClick, onEdi
 
       {/* Summary Cards with Inline Expansions */}
       <Grid container spacing={3} sx={{ mb: 4 }} alignItems="flex-start">
-        {/* Card 1: Active Items */}
-        <Grid item xs={12} sm={4}>
-          <Card 
-            sx={{ 
-              bgcolor: 'background.paper', 
-              borderLeft: '6px solid', 
-              borderColor: 'primary.main',
-              height: 'auto',
-              borderRadius: 3
-            }}
-          >
-            <CardContent 
-              onClick={() => setExpandedCard(expandedCard === 'active' ? null : 'active')}
-              sx={{ 
-                display: 'flex', 
-                alignItems: 'center', 
-                justifyContent: 'space-between',
-                cursor: 'pointer',
-                userSelect: 'none',
-                '&:hover': { bgcolor: 'action.hover' }
-              }}
-            >
-              <Box>
-                <Typography variant="subtitle2" color="text.secondary" sx={{ fontWeight: 'bold' }}>Active Items</Typography>
-                <Typography variant="h3" sx={{ fontWeight: 'bold', mt: 1 }}>{stats.totalActive}</Typography>
-              </Box>
-              <KitchenIcon color="primary" sx={{ fontSize: 40, opacity: 0.8 }} />
-            </CardContent>
-            
-            <Collapse in={expandedCard === 'active'}>
-              <Divider />
-              {renderExpandedList(stats.sortedActive)}
-            </Collapse>
-          </Card>
-        </Grid>
-
-        {/* Card 2: Expiring Soon */}
+        {/* Card 1: Expiring Soon */}
         <Grid item xs={12} sm={4}>
           <Card 
             sx={{ 
               bgcolor: 'background.paper', 
               borderLeft: '6px solid', 
               borderColor: 'warning.main',
-              height: 'auto',
-              borderRadius: 3
+              height: 'auto'
             }}
           >
             <CardContent 
@@ -403,6 +366,41 @@ export default function Dashboard({ products, settings, onAddProductClick, onEdi
           </Card>
         </Grid>
 
+        {/* Card 2: Active Items */}
+        <Grid item xs={12} sm={4}>
+          <Card 
+            sx={{ 
+              bgcolor: 'background.paper', 
+              borderLeft: '6px solid', 
+              borderColor: 'primary.main',
+              height: 'auto'
+            }}
+          >
+            <CardContent 
+              onClick={() => setExpandedCard(expandedCard === 'active' ? null : 'active')}
+              sx={{ 
+                display: 'flex', 
+                alignItems: 'center', 
+                justifyContent: 'space-between',
+                cursor: 'pointer',
+                userSelect: 'none',
+                '&:hover': { bgcolor: 'action.hover' }
+              }}
+            >
+              <Box>
+                <Typography variant="subtitle2" color="text.secondary" sx={{ fontWeight: 'bold' }}>Active Items</Typography>
+                <Typography variant="h3" sx={{ fontWeight: 'bold', mt: 1 }}>{stats.totalActive}</Typography>
+              </Box>
+              <KitchenIcon color="primary" sx={{ fontSize: 40, opacity: 0.8 }} />
+            </CardContent>
+            
+            <Collapse in={expandedCard === 'active'}>
+              <Divider />
+              {renderExpandedList(stats.sortedActive)}
+            </Collapse>
+          </Card>
+        </Grid>
+
         {/* Card 3: Expired Items */}
         <Grid item xs={12} sm={4}>
           <Card 
@@ -410,8 +408,7 @@ export default function Dashboard({ products, settings, onAddProductClick, onEdi
               bgcolor: 'background.paper', 
               borderLeft: '6px solid', 
               borderColor: 'error.main',
-              height: 'auto',
-              borderRadius: 3
+              height: 'auto'
             }}
           >
             <CardContent 

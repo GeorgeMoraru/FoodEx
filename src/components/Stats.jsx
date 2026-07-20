@@ -1,14 +1,35 @@
 import React, { useMemo } from 'react';
 import { 
-  Box, Grid, Paper, Typography, useTheme 
+  Box, Grid, Paper, Typography, useTheme, Button 
 } from '@mui/material';
+import { 
+  DeleteForever as DeleteIcon 
+} from '@mui/icons-material';
 import { 
   PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip,
   BarChart, Bar, XAxis, YAxis, CartesianGrid
 } from 'recharts';
+import dbClient from '../utils/dbClient';
 
-export default function Stats({ products, settings }) {
+export default function Stats({ products, settings, onRefresh }) {
   const theme = useTheme();
+
+  const handleClearHistory = async () => {
+    if (!window.confirm('Are you sure you want to clear all consumed and wasted history? This will reset your stats charts.')) {
+      return;
+    }
+    try {
+      await dbClient.updateDb((db) => {
+        // Filter out consumed/wasted products, keep only active products
+        db.products = db.products.filter(p => (p.status || 'ACTIVE') === 'ACTIVE');
+        return db;
+      });
+      onRefresh();
+    } catch (err) {
+      console.error('Clear history error:', err);
+      alert('Failed to clear stats history');
+    }
+  };
 
   const stats = useMemo(() => {
     const active = products.filter(p => p.status === 'ACTIVE' || !p.status);
@@ -81,18 +102,28 @@ export default function Stats({ products, settings }) {
 
   return (
     <Box sx={{ p: 1 }}>
-      <Box sx={{ mb: 4 }}>
-        <Typography variant="h4" sx={{ fontWeight: 'bold' }}>Stats & Reports</Typography>
-        <Typography variant="body1" color="text.secondary">
-          Visual analytics of your household food trends
-        </Typography>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4, flexWrap: 'wrap', gap: 2 }}>
+        <Box>
+          <Typography variant="h4" sx={{ fontWeight: 'bold' }}>Stats & Reports</Typography>
+          <Typography variant="body1" color="text.secondary">
+            Visual analytics of your household food trends
+          </Typography>
+        </Box>
+        <Button 
+          variant="outlined" 
+          color="error" 
+          startIcon={<DeleteIcon />} 
+          onClick={handleClearHistory}
+        >
+          Clear Stats History
+        </Button>
       </Box>
 
       {/* Charts Section */}
       <Grid container spacing={4}>
         {/* Active Locations Distribution */}
         <Grid item xs={12} md={6}>
-          <Paper sx={{ p: 3, display: 'flex', flexDirection: 'column', height: 350, borderRadius: 4 }}>
+          <Paper sx={{ p: 3, display: 'flex', flexDirection: 'column', height: 350 }}>
             <Typography variant="h6" gutterBottom sx={{ fontWeight: 'bold' }}>
               Active Items by Location
             </Typography>
@@ -126,7 +157,7 @@ export default function Stats({ products, settings }) {
 
         {/* Consumed vs Wasted History */}
         <Grid item xs={12} md={6}>
-          <Paper sx={{ p: 3, display: 'flex', flexDirection: 'column', height: 350, borderRadius: 4 }}>
+          <Paper sx={{ p: 3, display: 'flex', flexDirection: 'column', height: 350 }}>
             <Typography variant="h6" gutterBottom sx={{ fontWeight: 'bold' }}>
               Consumed vs Wasted History
             </Typography>
@@ -160,7 +191,7 @@ export default function Stats({ products, settings }) {
 
         {/* Expirations in Next 7 Days */}
         <Grid item xs={12}>
-          <Paper sx={{ p: 3, display: 'flex', flexDirection: 'column', height: 350, borderRadius: 4 }}>
+          <Paper sx={{ p: 3, display: 'flex', flexDirection: 'column', height: 350 }}>
             <Typography variant="h6" gutterBottom sx={{ fontWeight: 'bold' }}>
               Upcoming Expirations (Next 7 Days)
             </Typography>

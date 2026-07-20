@@ -336,7 +336,7 @@ export default function Settings({ settings, pushSubscriptions, onRefresh }) {
       <Grid container spacing={4}>
         {/* Left Column: Preferences, Push */}
         <Grid item xs={12} md={6}>
-          <Paper sx={{ p: 3, mb: 4, borderRadius: 4 }}>
+          <Paper sx={{ p: 3, mb: 4 }}>
             <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 3 }}>Preferences</Typography>
             
             <Box component="form" onSubmit={handleSaveSettings}>
@@ -372,18 +372,64 @@ export default function Settings({ settings, pushSubscriptions, onRefresh }) {
                 sx={{ mb: 3 }}
               />
 
-              <Button 
-                type="submit" 
-                variant="contained" 
-                disabled={loading}
-                sx={{ py: 1 }}
-              >
-                {loading ? <CircularProgress size={24} color="inherit" /> : 'Save Settings'}
-              </Button>
+              <Divider sx={{ my: 3 }} />
+
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+                <HAIcon color="primary" />
+                <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>Home Assistant Integration</Typography>
+              </Box>
+
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                Home Assistant can query your food status securely. By enabling this integration, an unguessable private link token is generated so Home Assistant can read your data without needing to handle complex OAuth authentication.
+              </Typography>
+
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={haEnabled}
+                    onChange={(e) => setHaEnabled(e.target.checked)}
+                    color="primary"
+                  />
+                }
+                label="Enable Home Assistant Sync (Save Settings to generate token)"
+                sx={{ mb: 2 }}
+              />
+
+              {haEnabled && settings.haToken && (
+                <Box sx={{ mb: 3 }}>
+                  <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 1 }}>YAML Sensor Configuration:</Typography>
+                  
+                  <Box sx={{ position: 'relative', bgcolor: '#272822', color: '#f8f8f2', p: 2, borderRadius: 1, fontFamily: 'monospace', fontSize: '0.75rem', overflowX: 'auto' }}>
+                    <pre style={{ margin: 0 }}>{haYaml}</pre>
+                    <IconButton 
+                      size="small" 
+                      sx={{ position: 'absolute', top: 8, right: 8, color: '#f8f8f2' }}
+                      onClick={() => copyToClipboard(haYaml)}
+                    >
+                      <CopyIcon fontSize="small" />
+                    </IconButton>
+                  </Box>
+                  
+                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 2 }}>
+                    <strong>Security Note:</strong> Anyone with your unique token can read your inventory summary. To revoke access, disable this setting and save.
+                  </Typography>
+                </Box>
+              )}
+
+              <Box sx={{ mt: 3 }}>
+                <Button 
+                  type="submit" 
+                  variant="contained" 
+                  disabled={loading}
+                  sx={{ py: 1 }}
+                >
+                  {loading ? <CircularProgress size={24} color="inherit" /> : 'Save Settings'}
+                </Button>
+              </Box>
             </Box>
           </Paper>
 
-          <Paper sx={{ p: 3, borderRadius: 4 }}>
+          <Paper sx={{ p: 3 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
               <PushIcon color="primary" />
               <Typography variant="h6" sx={{ fontWeight: 'bold' }}>Push Notifications</Typography>
@@ -423,7 +469,7 @@ export default function Settings({ settings, pushSubscriptions, onRefresh }) {
         {/* Right Column: Household Sharing, Locations, Home Assistant */}
         <Grid item xs={12} md={6}>
           {/* Household Sharing Card */}
-          <Paper sx={{ p: 3, mb: 4, borderRadius: 4 }}>
+          <Paper sx={{ p: 3, mb: 4 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
               <GroupIcon color="primary" />
               <Typography variant="h6" sx={{ fontWeight: 'bold' }}>Household Sharing</Typography>
@@ -499,7 +545,7 @@ export default function Settings({ settings, pushSubscriptions, onRefresh }) {
           </Paper>
 
           {/* Dynamic Locations Card */}
-          <Paper sx={{ p: 3, mb: 4, borderRadius: 4 }}>
+          <Paper sx={{ p: 3, mb: 4 }}>
             <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 1 }}>Storage Locations</Typography>
             <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
               Customize where you store food in your household.
@@ -535,51 +581,6 @@ export default function Settings({ settings, pushSubscriptions, onRefresh }) {
                 Add
               </Button>
             </Box>
-          </Paper>
-
-          {/* Home Assistant Card */}
-          <Paper sx={{ p: 3, borderRadius: 4 }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-              <HAIcon color="primary" />
-              <Typography variant="h6" sx={{ fontWeight: 'bold' }}>Home Assistant Integration</Typography>
-            </Box>
-
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-              Home Assistant can query your food status securely. By enabling this integration, an unguessable private link token is generated so Home Assistant can read your data without needing to handle complex OAuth authentication.
-            </Typography>
-
-            <FormControlLabel
-              control={
-                <Switch
-                  checked={haEnabled}
-                  onChange={(e) => setHaEnabled(e.target.checked)}
-                  color="primary"
-                />
-              }
-              label="Enable Home Assistant Sync (Save Settings to generate token)"
-              sx={{ mb: 2 }}
-            />
-
-            {haEnabled && settings.haToken && (
-              <>
-                <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 1 }}>YAML Sensor Configuration:</Typography>
-                
-                <Box sx={{ position: 'relative', bgcolor: '#272822', color: '#f8f8f2', p: 2, borderRadius: 2, fontFamily: 'monospace', fontSize: '0.75rem', overflowX: 'auto' }}>
-                  <pre style={{ margin: 0 }}>{haYaml}</pre>
-                  <IconButton 
-                    size="small" 
-                    sx={{ position: 'absolute', top: 8, right: 8, color: '#f8f8f2' }}
-                    onClick={() => copyToClipboard(haYaml)}
-                  >
-                    <CopyIcon fontSize="small" />
-                  </IconButton>
-                </Box>
-                
-                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 2 }}>
-                  <strong>Security Note:</strong> Anyone with your unique token can read your inventory summary. To revoke access, disable this setting and save.
-                </Typography>
-              </>
-            )}
           </Paper>
         </Grid>
       </Grid>

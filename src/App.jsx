@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ThemeProvider, CssBaseline, Box, Container, CircularProgress, Typography } from '@mui/material';
+import { ThemeProvider, CssBaseline, Box, Container, CircularProgress, Typography, Fade } from '@mui/material';
 import getTheme from './theme';
 import Navbar from './components/Navbar';
 import Login from './components/Login';
@@ -130,26 +130,39 @@ export default function App() {
           ) : db ? (
             <>
               {currentTab === 'dashboard' && (
-                <Dashboard 
-                  products={db.products || []} 
-                  settings={db.settings || {}}
-                  onAddProductClick={handleAddProductClick} 
-                  onEditProduct={handleEditProduct}
-                  onRefresh={fetchDatabase}
-                />
+                <Fade in={currentTab === 'dashboard'} timeout={400}>
+                  <Box>
+                    <Dashboard 
+                      products={db.products || []} 
+                      settings={db.settings || {}}
+                      onAddProductClick={handleAddProductClick} 
+                      onEditProduct={handleEditProduct}
+                      onRefresh={fetchDatabase}
+                    />
+                  </Box>
+                </Fade>
               )}
               {currentTab === 'stats' && (
-                <Stats 
-                  products={db.products || []} 
-                  settings={db.settings || {}}
-                />
+                <Fade in={currentTab === 'stats'} timeout={400}>
+                  <Box>
+                    <Stats 
+                      products={db.products || []} 
+                      settings={db.settings || {}}
+                      onRefresh={fetchDatabase}
+                    />
+                  </Box>
+                </Fade>
               )}
               {currentTab === 'settings' && (
-                <Settings 
-                  settings={db.settings || {}}
-                  pushSubscriptions={db.pushSubscriptions || []}
-                  onRefresh={fetchDatabase}
-                />
+                <Fade in={currentTab === 'settings'} timeout={400}>
+                  <Box>
+                    <Settings 
+                      settings={db.settings || {}}
+                      pushSubscriptions={db.pushSubscriptions || []}
+                      onRefresh={fetchDatabase}
+                    />
+                  </Box>
+                </Fade>
               )}
             </>
           ) : null}

@@ -4,10 +4,10 @@ export const getTheme = (mode) => createTheme({
   palette: {
     mode,
     primary: {
-      main: mode === 'light' ? '#1976d2' : '#90caf9', // Restored Material Blue
+      main: mode === 'light' ? '#1976d2' : '#90caf9', // Material Blue
     },
     secondary: {
-      main: mode === 'light' ? '#dc004e' : '#f48fb1', // Restored Material Pink
+      main: mode === 'light' ? '#dc004e' : '#f48fb1', // Material Pink
     },
     background: {
       default: mode === 'light' ? '#f5f5f5' : '#121212', // Restored default backgrounds
@@ -40,13 +40,13 @@ export const getTheme = (mode) => createTheme({
     },
   },
   shape: {
-    borderRadius: 4, // Restored classic Material Design sharp corner style (4px)
+    borderRadius: '4px', // Restored classic Material Design sharp corner style (4px)
   },
   components: {
     MuiButton: {
       styleOverrides: {
         root: {
-          borderRadius: 4, // Restored 4px button corners
+          borderRadius: '4px', // Restored 4px button corners
           padding: '6px 16px',
           transition: 'all 0.3s cubic-bezier(0.2, 0, 0, 1)',
           '&:hover': {
@@ -62,7 +62,7 @@ export const getTheme = (mode) => createTheme({
     MuiCard: {
       styleOverrides: {
         root: {
-          borderRadius: 4, // Restored 4px card corners
+          borderRadius: '4px', // Restored 4px card corners
           boxShadow: mode === 'light' 
             ? '0px 2px 1px -1px rgba(0,0,0,0.2), 0px 1px 1px 0px rgba(0,0,0,0.14), 0px 1px 3px 0px rgba(0,0,0,0.12)'
             : '0px 4px 20px rgba(0,0,0,0.3)',
@@ -86,7 +86,7 @@ export const getTheme = (mode) => createTheme({
     MuiListItemButton: {
       styleOverrides: {
         root: {
-          borderRadius: 4, // Restored 4px list item corners
+          borderRadius: '4px', // Restored 4px list item corners
           transition: 'all 0.25s cubic-bezier(0.2, 0, 0, 1)',
         }
       }
@@ -107,7 +107,7 @@ export const getTheme = (mode) => createTheme({
     MuiChip: {
       styleOverrides: {
         root: {
-          borderRadius: 4, // Restored 4px chips
+          borderRadius: '4px', // Restored 4px chips
           transition: 'all 0.2s cubic-bezier(0.2, 0, 0, 1)',
         }
       }
