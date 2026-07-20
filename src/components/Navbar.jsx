@@ -1,11 +1,14 @@
 import React, { useState } from 'react';
 import { 
-  AppBar, Toolbar, Typography, Button, IconButton, Box, Tabs, Tab, 
-  Menu, MenuItem, useMediaQuery, useTheme, Drawer, List, ListItem, ListItemButton, ListItemText 
+  AppBar, Toolbar, Typography, Box, Tabs, Tab, 
+  useMediaQuery, useTheme, Drawer, List, ListItem, ListItemButton, ListItemText, ListItemIcon,
+  IconButton
 } from '@mui/material';
 import { 
   Brightness4 as DarkIcon, Brightness7 as LightIcon, 
-  Menu as MenuIcon, Logout as LogoutIcon, GitHub as GitHubIcon 
+  Menu as MenuIcon, Logout as LogoutIcon, GitHub as GitHubIcon,
+  Dashboard as DashboardIcon, Settings as SettingsIcon,
+  BarChart as StatsIcon
 } from '@mui/icons-material';
 
 export default function Navbar({ currentTab, setCurrentTab, darkMode, setDarkMode, repo, onLogout }) {
@@ -14,12 +17,21 @@ export default function Navbar({ currentTab, setCurrentTab, darkMode, setDarkMod
   const [drawerOpen, setDrawerOpen] = useState(false);
 
   const handleTabChange = (event, newValue) => {
-    setCurrentTab(newValue);
+    if (newValue === 'theme') {
+      setDarkMode(!darkMode);
+    } else if (newValue === 'logout') {
+      onLogout();
+    } else {
+      setCurrentTab(newValue);
+    }
   };
 
   const menuItems = [
-    { value: 'dashboard', label: 'Dashboard' },
-    { value: 'settings', label: 'Settings' }
+    { value: 'dashboard', label: 'Dashboard', icon: <DashboardIcon /> },
+    { value: 'stats', label: 'Stats', icon: <StatsIcon /> },
+    { value: 'settings', label: 'Settings', icon: <SettingsIcon /> },
+    { value: 'theme', label: darkMode ? 'Light Mode' : 'Dark Mode', icon: darkMode ? <LightIcon /> : <DarkIcon /> },
+    { value: 'logout', label: 'Logout', icon: <LogoutIcon /> }
   ];
 
   const toggleDrawer = (open) => (event) => {
@@ -45,8 +57,9 @@ export default function Navbar({ currentTab, setCurrentTab, darkMode, setDarkMod
           </IconButton>
         )}
 
-        <Typography variant="h6" component="div" sx={{ flexGrow: 1, fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: 1 }}>
-          🍎 FoodEx
+        <Typography variant="h6" component="div" sx={{ flexGrow: 1, fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: 1.5 }}>
+          <img src="logo.png" alt="FoodEx Logo" style={{ width: 32, height: 32, borderRadius: '50%', border: '1px solid rgba(255, 255, 255, 0.2)' }} />
+          FoodEx
           {!isMobile && repo && (
             <Typography variant="caption" sx={{ opacity: 0.8, bgcolor: 'primary.dark', px: 1, py: 0.5, borderRadius: 1, display: 'flex', alignItems: 'center', gap: 0.5 }}>
               <GitHubIcon fontSize="inherit" /> {repo}
@@ -54,7 +67,7 @@ export default function Navbar({ currentTab, setCurrentTab, darkMode, setDarkMod
           )}
         </Typography>
 
-        {/* Desktop Tabs */}
+        {/* Desktop Tabs menu */}
         {!isMobile && (
           <Box sx={{ flexGrow: 1, display: 'flex', justifyContent: 'center' }}>
             <Tabs 
@@ -74,17 +87,6 @@ export default function Navbar({ currentTab, setCurrentTab, darkMode, setDarkMod
             </Tabs>
           </Box>
         )}
-
-        {/* Action Icons */}
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <IconButton color="inherit" onClick={() => setDarkMode(!darkMode)}>
-            {darkMode ? <LightIcon /> : <DarkIcon />}
-          </IconButton>
-          
-          <IconButton color="inherit" onClick={onLogout} title="Log Out">
-            <LogoutIcon />
-          </IconButton>
-        </Box>
       </Toolbar>
 
       {/* Mobile Drawer */}
@@ -106,16 +108,30 @@ export default function Navbar({ currentTab, setCurrentTab, darkMode, setDarkMod
             </Box>
           )}
           <List>
-            {menuItems.map((item) => (
-              <ListItem key={item.value} disablePadding>
-                <ListItemButton 
-                  selected={currentTab === item.value}
-                  onClick={() => setCurrentTab(item.value)}
-                >
-                  <ListItemText primary={item.label} />
-                </ListItemButton>
-              </ListItem>
-            ))}
+            {menuItems.map((item) => {
+              const isSelected = currentTab === item.value;
+              return (
+                <ListItem key={item.value} disablePadding>
+                  <ListItemButton 
+                    selected={isSelected}
+                    onClick={() => {
+                      if (item.value === 'theme') {
+                        setDarkMode(!darkMode);
+                      } else if (item.value === 'logout') {
+                        onLogout();
+                      } else {
+                        setCurrentTab(item.value);
+                      }
+                    }}
+                  >
+                    <ListItemIcon sx={{ color: isSelected ? 'primary.main' : 'inherit' }}>
+                      {item.icon}
+                    </ListItemIcon>
+                    <ListItemText primary={item.label} />
+                  </ListItemButton>
+                </ListItem>
+              );
+            })}
           </List>
         </Box>
       </Drawer>

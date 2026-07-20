@@ -4,7 +4,7 @@ import getTheme from './theme';
 import Navbar from './components/Navbar';
 import Login from './components/Login';
 import Dashboard from './components/Dashboard';
-import Inventory from './components/Inventory';
+import Stats from './components/Stats';
 import Settings from './components/Settings';
 import ProductFormModal from './components/ProductFormModal';
 import { auth } from './utils/firebase';
@@ -136,6 +136,12 @@ export default function App() {
                   onAddProductClick={handleAddProductClick} 
                   onEditProduct={handleEditProduct}
                   onRefresh={fetchDatabase}
+                />
+              )}
+              {currentTab === 'stats' && (
+                <Stats 
+                  products={db.products || []} 
+                  settings={db.settings || {}}
                 />
               )}
               {currentTab === 'settings' && (
