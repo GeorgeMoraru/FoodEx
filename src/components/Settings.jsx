@@ -7,7 +7,7 @@ import {
   Notifications as PushIcon, SettingsInputSvideo as HAIcon,
   ContentCopy as CopyIcon, Refresh as RefreshIcon
 } from '@mui/icons-material';
-import gitHubClient from '../utils/gitHubClient';
+import dbClient from '../utils/dbClient';
 
 function urlBase64ToUint8Array(base64String) {
   const padding = '='.repeat((4 - base64String.length % 4) % 4);
@@ -71,7 +71,7 @@ export default function Settings({ settings, pushSubscriptions, onRefresh }) {
     setSuccess('');
 
     try {
-      await gitHubClient.updateDb((db) => {
+      await dbClient.updateDb((db) => {
         db.settings = {
           ...db.settings,
           notificationDaysBefore: parseInt(notificationDaysBefore),
@@ -125,7 +125,7 @@ export default function Settings({ settings, pushSubscriptions, onRefresh }) {
       const subscriptionJson = JSON.parse(JSON.stringify(subscription));
 
       // 5. Save to database
-      await gitHubClient.updateDb((db) => {
+      await dbClient.updateDb((db) => {
         if (!db.pushSubscriptions) db.pushSubscriptions = [];
         db.pushSubscriptions = db.pushSubscriptions.filter(s => s.endpoint !== subscriptionJson.endpoint);
         db.pushSubscriptions.push(subscriptionJson);
@@ -153,7 +153,7 @@ export default function Settings({ settings, pushSubscriptions, onRefresh }) {
       const subscription = await registration.pushManager.getSubscription();
       if (subscription) {
         // Remove from database
-        await gitHubClient.updateDb((db) => {
+        await dbClient.updateDb((db) => {
           if (db.pushSubscriptions) {
             db.pushSubscriptions = db.pushSubscriptions.filter(s => s.endpoint !== subscription.endpoint);
           }
@@ -179,16 +179,12 @@ export default function Settings({ settings, pushSubscriptions, onRefresh }) {
     setError('');
     setSuccess('');
     try {
-      const { owner, repo } = gitHubClient.getRepoInfo();
-      // Dispatch repository dispatch event to trigger the Actions notification workflow
-      await gitHubClient.client.post(`/repos/${owner}/${repo}/dispatches`, {
-        event_type: 'test-notification',
-        client_payload: { message: 'Test notification triggered from FoodEx settings UI.' }
-      });
-      setSuccess('Test notification workflow dispatched! Check your notifications or GitHub Actions logs in a minute.');
+      // With Firebase, we'd need a Cloud Function to send the test push.
+      // Since we don't have one deployed, we'll alert the user.
+      setSuccess('Test notifications require a Firebase Cloud Function which is not currently deployed in this pure-client setup. Push will work if you deploy a backend sender.');
     } catch (err) {
       console.error(err);
-      setError('Failed to dispatch test notification workflow. Make sure your PAT has "workflow" scope and Actions are enabled.');
+      setError('Failed to dispatch test notification.');
     } finally {
       setLoading(false);
     }
@@ -199,15 +195,14 @@ export default function Settings({ settings, pushSubscriptions, onRefresh }) {
     alert('Copied to clipboard!');
   };
 
-  const ownerRepo = gitHubClient.repo || 'username/repo';
+  const uid = dbClient.uid || 'YOUR_USER_ID';
 
   const haYaml = `sensor:
   - platform: rest
     name: FoodEx Active Items
-    resource: https://raw.githubusercontent.com/${ownerRepo}/main/db.json
-    # headers:
-    #   Authorization: "token YOUR_GITHUB_PAT" # Uncomment & add PAT if your repo is PRIVATE
-    #   Accept: "application/vnd.github.v3.raw"
+    resource: https://firestore.googleapis.com/v1/projects/YOUR_PROJECT_ID/databases/(default)/documents/users/${uid}
+    # Firebase requires auth to access this URL directly.
+    # To use this, you would need to set up a Firebase Admin SDK endpoint or open Firestore read rules for this document.
     value_template: >
       {% if value_json.products is defined %}
         {{ value_json.products | selectattr('status', 'eq', 'ACTIVE') | list | count }}

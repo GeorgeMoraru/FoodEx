@@ -1,74 +1,31 @@
 import React, { useState } from 'react';
 import { 
-  Box, Container, Paper, TextField, Button, Typography, 
-  Alert, CircularProgress, Dialog, DialogTitle, DialogContent,
-  DialogContentText, DialogActions
+  Box, Container, Paper, Button, Typography, 
+  Alert, CircularProgress, Divider
 } from '@mui/material';
-import LockOpenIcon from '@mui/icons-material/LockOpen';
-import gitHubClient from '../utils/gitHubClient';
+import GoogleIcon from '@mui/icons-material/Google';
+import GitHubIcon from '@mui/icons-material/GitHub';
+import { signInWithPopup, browserPopupRedirectResolver } from 'firebase/auth';
+import { auth, googleProvider, githubProvider } from '../utils/firebase';
+import dbClient from '../utils/dbClient';
 
 export default function Login({ onLoginSuccess }) {
-  const [pat, setPat] = useState(gitHubClient.pat || '');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [confirmCreateOpen, setConfirmCreateOpen] = useState(false);
-  const [repoName, setRepoName] = useState('');
 
-  const handleVerify = async (e) => {
-    if (e) e.preventDefault();
+  const handleLogin = async (provider) => {
     setError('');
     setLoading(true);
-
-    if (!pat.trim()) {
-      setError('GitHub PAT is required.');
-      setLoading(false);
-      return;
-    }
-
     try {
-      await gitHubClient.setPat(pat.trim());
-      const expectedRepo = gitHubClient.repo;
-      setRepoName(expectedRepo);
-      
-      const repoDetails = await gitHubClient.checkRepository();
-      if (!repoDetails) {
-        // Repo does not exist, open confirmation dialog to create it
-        setConfirmCreateOpen(true);
-        setLoading(false);
-        return;
-      }
-
-      // Repo exists, initialize db.json if missing
-      await gitHubClient.initializeDbIfMissing();
+      await signInWithPopup(auth, provider, browserPopupRedirectResolver);
+      // Wait a moment for Firebase auth state to settle, then initialize DB
+      await dbClient.initializeDbIfMissing();
       onLoginSuccess();
     } catch (err) {
       console.error(err);
-      gitHubClient.clearCredentials();
-      setError(err.response?.data?.message || err.message || 'Verification failed. Please check your PAT.');
+      setError(err.message || 'Authentication failed.');
       setLoading(false);
     }
-  };
-
-  const handleCreateRepo = async () => {
-    setConfirmCreateOpen(false);
-    setLoading(true);
-    setError('');
-
-    try {
-      await gitHubClient.createRepository();
-      await gitHubClient.initializeDbIfMissing();
-      onLoginSuccess();
-    } catch (err) {
-      console.error(err);
-      gitHubClient.clearCredentials();
-      setError(err.message || 'Failed to create or initialize the repository.');
-      setLoading(false);
-    }
-  };
-
-  const handleCancelCreate = () => {
-    setConfirmCreateOpen(false);
-    gitHubClient.clearCredentials();
   };
 
   return (
@@ -113,79 +70,61 @@ export default function Login({ onLoginSuccess }) {
             FoodEx
           </Typography>
           <Typography variant="body2" color="text.secondary" align="center" sx={{ mb: 4 }}>
-            Serverless Food Expiration Tracker
+            Seamless Food Expiration Tracker
           </Typography>
 
           {error && (
-            <Alert severity="error" sx={{ width: '100%', mb: 2, borderRadius: 2 }}>
+            <Alert severity="error" sx={{ width: '100%', mb: 3, borderRadius: 2 }}>
               {error}
             </Alert>
           )}
 
-          <Box component="form" onSubmit={handleVerify} sx={{ width: '100%', mt: 1 }}>
-            <TextField
-              margin="normal"
-              required
-              fullWidth
-              label="GitHub Personal Access Token (PAT)"
-              type="password"
-              value={pat}
-              onChange={(e) => setPat(e.target.value)}
-              helperText="Requires 'repo' scope."
-              sx={{ mb: 3 }}
-            />
-
+          <Box sx={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 2 }}>
             <Button
-              type="submit"
+              fullWidth
+              variant="outlined"
+              size="large"
+              disabled={loading}
+              onClick={() => handleLogin(googleProvider)}
+              startIcon={<GoogleIcon />}
+              sx={{ py: 1.5, borderRadius: 2, fontWeight: 700, borderColor: 'divider', color: 'text.primary' }}
+            >
+              Sign in with Google
+            </Button>
+            
+            <Button
               fullWidth
               variant="contained"
-              disabled={loading}
               size="large"
-              startIcon={!loading && <LockOpenIcon />}
+              disabled={loading}
+              onClick={() => handleLogin(githubProvider)}
+              startIcon={<GitHubIcon />}
               sx={{
                 py: 1.5,
-                fontSize: '1rem',
-                fontWeight: 700,
                 borderRadius: 2,
-                background: theme =>
-                  theme.palette.mode === 'dark' ? '#1976d2' : 'primary.main',
+                fontWeight: 700,
+                bgcolor: theme => theme.palette.mode === 'dark' ? '#238636' : '#24292f',
+                color: '#ffffff',
                 '&:hover': {
-                  background: theme =>
-                    theme.palette.mode === 'dark' ? '#1565c0' : undefined,
-                },
+                  bgcolor: theme => theme.palette.mode === 'dark' ? '#2ea043' : '#000000',
+                }
               }}
             >
-              {loading ? <CircularProgress size={24} color="inherit" /> : 'Connect Database'}
+              Sign in with GitHub
             </Button>
           </Box>
+          
+          {loading && (
+            <Box sx={{ mt: 3, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+              <CircularProgress size={24} />
+              <Typography variant="caption" sx={{ mt: 1 }} color="text.secondary">Authenticating...</Typography>
+            </Box>
+          )}
         </Paper>
 
-        <Typography variant="caption" color="text.secondary" align="center" display="block" sx={{ mt: 2, opacity: 0.6 }}>
-          Your data lives securely in a private repository on your GitHub account. No servers required.
+        <Typography variant="caption" color="text.secondary" align="center" display="block" sx={{ mt: 3, opacity: 0.6 }}>
+          Your data syncs securely across all your devices via Firebase.
         </Typography>
-
-        {/* Repository Creation Confirmation Dialog */}
-        <Dialog
-          open={confirmCreateOpen}
-          onClose={handleCancelCreate}
-          aria-labelledby="confirm-dialog-title"
-          aria-describedby="confirm-dialog-description"
-        >
-          <DialogTitle id="confirm-dialog-title">
-            Database Repository Setup
-          </DialogTitle>
-          <DialogContent>
-            <DialogContentText id="confirm-dialog-description">
-              We couldn't find the <strong>{repoName}</strong> repository in your account. Would you like FoodEx to create this private repository automatically to store your inventory data?
-            </DialogContentText>
-          </DialogContent>
-          <DialogActions>
-            <Button onClick={handleCancelCreate} color="inherit">Cancel</Button>
-            <Button onClick={handleCreateRepo} color="primary" variant="contained" autoFocus disabled={loading}>
-              {loading ? <CircularProgress size={20} color="inherit" /> : 'Create Repository'}
-            </Button>
-          </DialogActions>
-        </Dialog>
       </Container>
     </Box>
   );

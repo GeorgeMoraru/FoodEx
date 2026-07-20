@@ -7,10 +7,12 @@ import Dashboard from './components/Dashboard';
 import Inventory from './components/Inventory';
 import Settings from './components/Settings';
 import ProductFormModal from './components/ProductFormModal';
-import gitHubClient from './utils/gitHubClient';
+import { auth } from './utils/firebase';
+import { onAuthStateChanged } from 'firebase/auth';
+import dbClient from './utils/dbClient';
 
 export default function App() {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [user, setUser] = useState(null);
   const [db, setDb] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -30,10 +32,15 @@ export default function App() {
 
   // Check auth status on load
   useEffect(() => {
-    if (gitHubClient.isAuthenticated()) {
-      setIsAuthenticated(true);
-      fetchDatabase();
-    }
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
+      if (currentUser) {
+        fetchDatabase();
+      } else {
+        setDb(null);
+      }
+    });
+    return () => unsubscribe();
   }, []);
 
   // Save theme selection
@@ -45,34 +52,30 @@ export default function App() {
     setLoading(true);
     setError('');
     try {
-      const data = await gitHubClient.getDbFile();
+      const data = await dbClient.getDbFile();
       if (data) {
         setDb(data.db);
       } else {
-        // If db.json is missing but authenticated, initialize it
-        await gitHubClient.initializeDbIfMissing();
-        const dataRetry = await gitHubClient.getDbFile();
+        await dbClient.initializeDbIfMissing();
+        const dataRetry = await dbClient.getDbFile();
         if (dataRetry) setDb(dataRetry.db);
       }
-      setIsAuthenticated(true);
     } catch (err) {
       console.error(err);
-      setError('Failed to fetch database file. Check repository permissions or network.');
-      // Keep credentials but show error so they can log out if needed
+      setError('Failed to fetch database file from Firebase.');
     } finally {
       setLoading(false);
     }
   };
 
   const handleLoginSuccess = () => {
-    setIsAuthenticated(true);
+    // onAuthStateChanged handles the state, but we can proactively fetch
     fetchDatabase();
     setCurrentTab('dashboard');
   };
 
   const handleLogout = () => {
-    gitHubClient.clearCredentials();
-    setIsAuthenticated(false);
+    dbClient.clearCredentials();
     setDb(null);
   };
 
@@ -88,7 +91,7 @@ export default function App() {
 
   const activeTheme = getTheme(darkMode ? 'dark' : 'light');
 
-  if (!isAuthenticated) {
+  if (!user) {
     return (
       <ThemeProvider theme={activeTheme}>
         <CssBaseline />
@@ -106,7 +109,7 @@ export default function App() {
           setCurrentTab={setCurrentTab} 
           darkMode={darkMode} 
           setDarkMode={setDarkMode} 
-          username={gitHubClient.username}
+          username={user.displayName || user.email}
           onLogout={handleLogout}
         />
         
@@ -114,7 +117,7 @@ export default function App() {
           {loading && !db ? (
             <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', mt: 8, gap: 2 }}>
               <CircularProgress />
-              <Typography variant="body2" color="text.secondary">Loading FoodEx database from GitHub...</Typography>
+              <Typography variant="body2" color="text.secondary">Loading FoodEx database...</Typography>
             </Box>
           ) : error ? (
             <Box sx={{ p: 3, textAlign: 'center' }}>

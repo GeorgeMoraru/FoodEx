@@ -8,7 +8,7 @@ import {
   Close as CloseIcon, CameraAlt as CameraIcon, 
   QrCodeScanner as ScannerIcon, PhotoCamera as ShotIcon 
 } from '@mui/icons-material';
-import gitHubClient from '../utils/gitHubClient';
+import dbClient from '../utils/dbClient';
 import ScannerModal from './ScannerModal';
 
 export default function ProductFormModal({ open, onClose, product, onSuccess }) {
@@ -24,17 +24,10 @@ export default function ProductFormModal({ open, onClose, product, onSuccess }) 
   const [expirationDate, setExpirationDate] = useState('');
   
   // Images
-  const [base64Image, setBase64Image] = useState(null);
   const [imagePreview, setImagePreview] = useState('');
-  
-  // Camera state (for taking item photo)
-  const [cameraActive, setCameraActive] = useState(false);
-  const videoRef = useRef(null);
-  const streamRef = useRef(null);
   
   // Scanner Modal state (for scanning dates)
   const [scannerOpen, setScannerOpen] = useState(false);
-  const [flash, setFlash] = useState(false);
 
   // FoodKeeper suggestions dataset
   const [foodkeeper, setFoodkeeper] = useState([]);
@@ -71,17 +64,33 @@ export default function ProductFormModal({ open, onClose, product, onSuccess }) 
         setLocation('Fridge');
         setAddedDate(new Date().toISOString().split('T')[0]);
         setExpirationDate('');
-        setBase64Image(null);
+        setAddedDate(new Date().toISOString().split('T')[0]);
+        setExpirationDate('');
         setImagePreview('');
       }
       setError('');
     }
-    
-    // Cleanup camera when modal closes
-    return () => {
-      stopCamera();
-    };
   }, [open, product]);
+
+  const fetchWikipediaImage = async (query) => {
+    try {
+      // Use just the English part if it exists (e.g. "Ouă / Eggs" -> "Eggs")
+      let cleanQuery = query;
+      if (query.includes('/')) {
+        cleanQuery = query.split('/')[1].trim();
+      }
+      const url = `https://en.wikipedia.org/w/api.php?action=query&titles=${encodeURIComponent(cleanQuery)}&prop=pageimages&format=json&pithumbsize=400&origin=*`;
+      const res = await fetch(url);
+      const data = await res.json();
+      const pages = data.query.pages;
+      const pageId = Object.keys(pages)[0];
+      if (pageId !== '-1' && pages[pageId].thumbnail) {
+        setImagePreview(pages[pageId].thumbnail.source);
+      }
+    } catch (e) {
+      console.error('Failed to fetch Wikipedia image:', e);
+    }
+  };
 
   // Autocomplete change: auto fill default location and calculate expiration
   const handleFoodkeeperSelect = (selectedName) => {
@@ -94,6 +103,9 @@ export default function ProductFormModal({ open, onClose, product, onSuccess }) 
       return lowerF === lowerS || lowerF.split('/').some(part => part.trim() === lowerS);
     });
     if (match) {
+      // Auto-fetch image if found
+      fetchWikipediaImage(match.name);
+
       if (match.defaultLocation) {
         setLocation(match.defaultLocation);
         
@@ -106,78 +118,17 @@ export default function ProductFormModal({ open, onClose, product, onSuccess }) 
         const exp = new Date(added.getTime() + days * 24 * 60 * 60 * 1000);
         setExpirationDate(exp.toISOString().split('T')[0]);
       }
+    } else if (selectedName) {
+      fetchWikipediaImage(selectedName);
     }
   };
 
   const handleNameBlur = () => {
-    if (!name || isEdit || expirationDate !== '') return;
+    if (!name || isEdit) return;
     handleFoodkeeperSelect(name);
   };
 
-  // Convert uploaded file to base64
-  const handleFileChange = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setBase64Image(reader.result);
-        setImagePreview(reader.result);
-      };
-      reader.readAsDataURL(file);
-    }
-  };
 
-  // Start Camera for capturing product photo
-  const startCamera = async () => {
-    try {
-      setCameraActive(true);
-      const mediaStream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment' }
-      });
-      streamRef.current = mediaStream;
-    } catch (err) {
-      console.error('Webcam capture access denied:', err);
-      setError('Could not access webcam for product photo.');
-      setCameraActive(false);
-    }
-  };
-
-  useEffect(() => {
-    if (cameraActive && videoRef.current && streamRef.current) {
-      videoRef.current.srcObject = streamRef.current;
-    }
-  }, [cameraActive]);
-
-  const stopCamera = () => {
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach(track => track.stop());
-      streamRef.current = null;
-    }
-    setCameraActive(false);
-  };
-
-  // Snap photo
-  const capturePhoto = () => {
-    if (!videoRef.current) return;
-    const video = videoRef.current;
-    
-    const canvas = document.createElement('canvas');
-    canvas.width = video.videoWidth || 640;
-    canvas.height = video.videoHeight || 480;
-    const ctx = canvas.getContext('2d');
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-    
-    const dataUrl = canvas.toDataURL('image/jpeg');
-    setBase64Image(dataUrl);
-    setImagePreview(dataUrl);
-    
-    // Visual flash feedback
-    setFlash(true);
-    setTimeout(() => {
-      setFlash(false);
-      stopCamera();
-    }, 150);
-  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -191,18 +142,7 @@ export default function ProductFormModal({ open, onClose, product, onSuccess }) 
     setLoading(true);
 
     try {
-      let uploadResult = null;
-      if (base64Image) {
-        // Upload new image
-        uploadResult = await gitHubClient.uploadImage(base64Image);
-        
-        // If editing and had a previous image, delete the old one
-        if (isEdit && product.imagePath) {
-          await gitHubClient.deleteImage(product.imagePath);
-        }
-      }
-
-      await gitHubClient.updateDb((db) => {
+      await dbClient.updateDb((db) => {
         if (isEdit) {
           const idx = db.products.findIndex(p => p.id === product.id);
           if (idx !== -1) {
@@ -214,8 +154,8 @@ export default function ProductFormModal({ open, onClose, product, onSuccess }) 
               location,
               addedDate,
               expirationDate,
-              imageUrl: uploadResult ? uploadResult.imageUrl : db.products[idx].imageUrl,
-              imagePath: uploadResult ? uploadResult.imagePath : db.products[idx].imagePath
+              imageUrl: imagePreview || db.products[idx].imageUrl,
+              imagePath: null
             };
           }
         } else {
@@ -227,8 +167,8 @@ export default function ProductFormModal({ open, onClose, product, onSuccess }) 
             location,
             addedDate,
             expirationDate,
-            imageUrl: uploadResult ? uploadResult.imageUrl : null,
-            imagePath: uploadResult ? uploadResult.imagePath : null,
+            imageUrl: imagePreview || null,
+            imagePath: null,
             status: 'ACTIVE'
           });
         }
@@ -383,100 +323,45 @@ export default function ProductFormModal({ open, onClose, product, onSuccess }) 
                 </Box>
               </Grid>
 
-              {/* Product Picture Capture/Upload */}
+              {/* Product Picture Auto-generated */}
               <Grid item xs={12}>
                 <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 'bold' }}>
                   Product Image
                 </Typography>
-
-                {cameraActive ? (
-                  <Box sx={{ position: 'relative', width: '100%', pt: '75%', bgcolor: '#000000', borderRadius: 2, overflow: 'hidden' }}>
-                    {flash && (
-                      <Box sx={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', bgcolor: '#ffffff', zIndex: 10 }} />
-                    )}
-                    <video 
-                      ref={videoRef} 
-                      autoPlay 
-                      playsInline 
-                      muted
-                      style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'cover' }}
-                    />
-                    <Box sx={{ position: 'absolute', bottom: 16, left: 0, width: '100%', display: 'flex', justifyContent: 'center', gap: 2 }}>
-                      <Button variant="contained" color="success" onClick={capturePhoto} startIcon={<ShotIcon />}>
-                        Snap
-                      </Button>
-                      <Button variant="contained" color="error" onClick={stopCamera}>
-                        Cancel
-                      </Button>
+                
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                  {imagePreview ? (
+                    <Card variant="outlined" sx={{ borderRadius: 2, overflow: 'hidden', width: 100, height: 100 }}>
+                      <CardMedia
+                        component="img"
+                        height="100"
+                        image={imagePreview}
+                        alt="Product Image"
+                        sx={{ objectFit: 'cover' }}
+                      />
+                    </Card>
+                  ) : (
+                    <Box sx={{ 
+                      width: 100, 
+                      height: 100, 
+                      border: '1px dashed', 
+                      borderColor: 'divider', 
+                      borderRadius: 2, 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      justifyContent: 'center',
+                      color: 'text.secondary',
+                      fontSize: '0.75rem',
+                      textAlign: 'center',
+                      p: 1
+                    }}>
+                      Type a name to fetch image
                     </Box>
-                  </Box>
-                ) : (
-                  <Grid container spacing={2} alignItems="center">
-                    <Grid item xs={8}>
-                      <Box sx={{ display: 'flex', gap: 1, mb: 1 }}>
-                        <Button
-                          variant="outlined"
-                          component="label"
-                          sx={{ flexGrow: 1 }}
-                        >
-                          Upload File
-                          <input
-                            type="file"
-                            hidden
-                            accept="image/*"
-                            onChange={handleFileChange}
-                          />
-                        </Button>
-                        <Button
-                          variant="outlined"
-                          onClick={startCamera}
-                          startIcon={<CameraIcon />}
-                        >
-                          Camera
-                        </Button>
-                      </Box>
-                      {imagePreview && (
-                        <Button 
-                          variant="text" 
-                          color="error" 
-                          onClick={() => {
-                            setBase64Image(null);
-                            setImagePreview('');
-                          }}
-                        >
-                          Clear Image
-                        </Button>
-                      )}
-                    </Grid>
-                    <Grid item xs={4}>
-                      {imagePreview ? (
-                        <Card variant="outlined" sx={{ borderRadius: 2, overflow: 'hidden' }}>
-                          <CardMedia
-                            component="img"
-                            height="80"
-                            image={imagePreview}
-                            alt="Product Image Preview"
-                            sx={{ objectFit: 'cover' }}
-                          />
-                        </Card>
-                      ) : (
-                        <Box sx={{ 
-                          height: 80, 
-                          border: '1px dashed', 
-                          borderColor: 'divider', 
-                          borderRadius: 2, 
-                          display: 'flex', 
-                          alignItems: 'center', 
-                          justifyContent: 'center',
-                          color: 'text.secondary',
-                          fontSize: '0.75rem'
-                        }}>
-                          No Image
-                        </Box>
-                      )}
-                    </Grid>
-                  </Grid>
-                )}
+                  )}
+                  <Typography variant="caption" color="text.secondary">
+                    Product image is automatically fetched from Wikipedia based on the food name.
+                  </Typography>
+                </Box>
               </Grid>
             </Grid>
 
@@ -485,7 +370,7 @@ export default function ProductFormModal({ open, onClose, product, onSuccess }) 
               <Button onClick={onClose} variant="outlined" disabled={loading}>
                 Cancel
               </Button>
-              <Button type="submit" variant="contained" disabled={loading || cameraActive}>
+              <Button type="submit" variant="contained" disabled={loading}>
                 {loading ? <CircularProgress size={24} color="inherit" /> : (isEdit ? 'Save Changes' : 'Add Product')}
               </Button>
             </Box>
