@@ -13,7 +13,7 @@ import {
 } from '@mui/icons-material';
 import dbClient from '../utils/dbClient';
 
-export default function Inventory({ products, onEditProduct, onAddProductClick, onRefresh }) {
+export default function Inventory({ products, settings, onEditProduct, onAddProductClick, onRefresh }) {
   // Search & Filter State
   const [search, setSearch] = useState('');
   const [locationFilter, setLocationFilter] = useState('All');
@@ -82,10 +82,10 @@ export default function Inventory({ products, onEditProduct, onAddProductClick, 
 
   // Helper to get location icon
   const getLocationIcon = (loc) => {
-    if (loc === 'Fridge') return <FridgeIcon fontSize="small" />;
-    if (loc === 'Pantry') return <PantryIcon fontSize="small" />;
-    if (loc === 'Freezer') return <FreezerIcon fontSize="small" />;
-    return null;
+    const l = loc ? loc.toLowerCase() : '';
+    if (l.includes('fridge')) return <FridgeIcon fontSize="small" />;
+    if (l.includes('freezer')) return <FreezerIcon fontSize="small" />;
+    return <PantryIcon fontSize="small" />;
   };
 
   // Expiration countdown calculations
@@ -218,9 +218,9 @@ export default function Inventory({ products, onEditProduct, onAddProductClick, 
               onChange={(e) => setLocationFilter(e.target.value)}
             >
               <MenuItem value="All">All Locations</MenuItem>
-              <MenuItem value="Fridge">Fridge</MenuItem>
-              <MenuItem value="Pantry">Pantry</MenuItem>
-              <MenuItem value="Freezer">Freezer</MenuItem>
+              {(settings.locations || ['Fridge', 'Freezer']).map(loc => (
+                <MenuItem key={loc} value={loc}>{loc}</MenuItem>
+              ))}
             </Select>
           </FormControl>
         </Grid>

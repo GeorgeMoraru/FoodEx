@@ -1,11 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Box, Typography, Paper, TextField, Button, Grid, 
-  CircularProgress, Alert, Divider, FormControlLabel, Switch, IconButton
+  CircularProgress, Alert, Divider, FormControlLabel, Switch, IconButton,
+  List, ListItem, ListItemText, ListItemSecondaryAction
 } from '@mui/material';
 import { 
   Notifications as PushIcon, SettingsInputSvideo as HAIcon,
-  ContentCopy as CopyIcon, Refresh as RefreshIcon
+  ContentCopy as CopyIcon, Refresh as RefreshIcon,
+  Delete as DeleteIcon, Group as GroupIcon, Add as AddIcon,
+  MeetingRoom as LeaveIcon
 } from '@mui/icons-material';
 import dbClient from '../utils/dbClient';
 
@@ -33,6 +36,14 @@ export default function Settings({ settings, pushSubscriptions, onRefresh }) {
   const [isSubscribed, setIsSubscribed] = useState(false);
   const [notificationSupport, setNotificationSupport] = useState(true);
 
+  // Household sharing state
+  const [members, setMembers] = useState([]);
+  const [targetHouseholdId, setTargetHouseholdId] = useState('');
+  
+  // Custom locations state
+  const [newLocationName, setNewLocationName] = useState('');
+  const currentLocations = settings.locations || ['Fridge', 'Freezer'];
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -40,7 +51,17 @@ export default function Settings({ settings, pushSubscriptions, onRefresh }) {
   // Check if browser is currently subscribed
   useEffect(() => {
     checkPushSupport();
+    fetchMembers();
   }, [pushSubscriptions]);
+
+  const fetchMembers = async () => {
+    try {
+      const list = await dbClient.getHouseholdMembers();
+      setMembers(list);
+    } catch (err) {
+      console.error('Error fetching household members:', err);
+    }
+  };
 
   const checkPushSupport = async () => {
     if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
@@ -53,7 +74,6 @@ export default function Settings({ settings, pushSubscriptions, onRefresh }) {
       if (registration) {
         const subscription = await registration.pushManager.getSubscription();
         if (subscription) {
-          // Verify if it exists in db subscriptions
           const exists = pushSubscriptions.some(s => s.endpoint === subscription.endpoint);
           setIsSubscribed(exists);
         } else {
@@ -72,13 +92,17 @@ export default function Settings({ settings, pushSubscriptions, onRefresh }) {
     setSuccess('');
 
     try {
+      const getUuid = () => {
+        return self.crypto?.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+      };
+
       await dbClient.updateDb((db) => {
         db.settings = {
           ...db.settings,
           notificationDaysBefore: parseInt(notificationDaysBefore),
           emailAlertsEnabled,
           emailAddress: emailAddress.trim(),
-          haToken: haEnabled ? (db.settings.haToken || crypto.randomUUID()) : null
+          haToken: haEnabled ? (db.settings.haToken || getUuid()) : null
         };
         return db;
       });
@@ -92,6 +116,103 @@ export default function Settings({ settings, pushSubscriptions, onRefresh }) {
     }
   };
 
+  // Custom Locations Operations
+  const handleAddLocation = async (e) => {
+    e.preventDefault();
+    const name = newLocationName.trim();
+    if (!name) return;
+
+    if (currentLocations.some(l => l.toLowerCase() === name.toLowerCase())) {
+      setError('Location already exists.');
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+    try {
+      await dbClient.updateDb((db) => {
+        if (!db.settings.locations) db.settings.locations = ['Fridge', 'Freezer'];
+        db.settings.locations.push(name);
+        return db;
+      });
+      setNewLocationName('');
+      setSuccess(`Added location "${name}"`);
+      onRefresh();
+    } catch (err) {
+      setError('Failed to add location: ' + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteLocation = async (locationToDelete) => {
+    if (currentLocations.length <= 1) {
+      setError('You must keep at least one storage location.');
+      return;
+    }
+
+    if (!window.confirm(`Are you sure you want to delete "${locationToDelete}"? Items currently stored in this location will remain, but the location itself will be removed from filters.`)) {
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+    try {
+      await dbClient.updateDb((db) => {
+        db.settings.locations = (db.settings.locations || ['Fridge', 'Freezer']).filter(l => l !== locationToDelete);
+        return db;
+      });
+      setSuccess(`Deleted location "${locationToDelete}"`);
+      onRefresh();
+    } catch (err) {
+      setError('Failed to delete location: ' + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Household Operations
+  const handleJoinHousehold = async (e) => {
+    e.preventDefault();
+    const targetId = targetHouseholdId.trim();
+    if (!targetId) return;
+
+    setLoading(true);
+    setError('');
+    setSuccess('');
+    try {
+      await dbClient.joinHousehold(targetId);
+      setSuccess('Successfully joined new household!');
+      setTargetHouseholdId('');
+      onRefresh();
+      fetchMembers();
+    } catch (err) {
+      setError(err.message || 'Failed to join household.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleLeaveHousehold = async () => {
+    if (!window.confirm('Are you sure you want to leave this household? You will return to your default isolated private household inventory.')) {
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+    setSuccess('');
+    try {
+      await dbClient.leaveHousehold();
+      setSuccess('Returned to private household!');
+      onRefresh();
+      fetchMembers();
+    } catch (err) {
+      setError('Failed to leave household: ' + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleNotificationSubscribe = async () => {
     setError('');
     setSuccess('');
@@ -99,7 +220,6 @@ export default function Settings({ settings, pushSubscriptions, onRefresh }) {
     if (!notificationSupport) return;
 
     try {
-      // 1. Request Permission
       const permission = await Notification.requestPermission();
       if (permission !== 'granted') {
         setError('Notification permission denied.');
@@ -107,18 +227,14 @@ export default function Settings({ settings, pushSubscriptions, onRefresh }) {
       }
 
       setLoading(true);
-
-      // 2. Register Service Worker
       const registration = await navigator.serviceWorker.register('./sw.js');
       await navigator.serviceWorker.ready;
 
-      // 3. Get VAPID key
       const publicKey = settings.vapidPublicKey;
       if (!publicKey) {
         throw new Error('VAPID Public Key not found in settings database.');
       }
 
-      // 4. Subscribe
       const subscription = await registration.pushManager.subscribe({
         userVisibleOnly: true,
         applicationServerKey: urlBase64ToUint8Array(publicKey)
@@ -126,7 +242,6 @@ export default function Settings({ settings, pushSubscriptions, onRefresh }) {
 
       const subscriptionJson = JSON.parse(JSON.stringify(subscription));
 
-      // 5. Save to database
       await dbClient.updateDb((db) => {
         if (!db.pushSubscriptions) db.pushSubscriptions = [];
         db.pushSubscriptions = db.pushSubscriptions.filter(s => s.endpoint !== subscriptionJson.endpoint);
@@ -154,15 +269,12 @@ export default function Settings({ settings, pushSubscriptions, onRefresh }) {
       const registration = await navigator.serviceWorker.ready;
       const subscription = await registration.pushManager.getSubscription();
       if (subscription) {
-        // Remove from database
         await dbClient.updateDb((db) => {
           if (db.pushSubscriptions) {
             db.pushSubscriptions = db.pushSubscriptions.filter(s => s.endpoint !== subscription.endpoint);
           }
           return db;
         });
-
-        // Unsubscribe on browser
         await subscription.unsubscribe();
       }
       setIsSubscribed(false);
@@ -181,8 +293,6 @@ export default function Settings({ settings, pushSubscriptions, onRefresh }) {
     setError('');
     setSuccess('');
     try {
-      // With Firebase, we'd need a Cloud Function to send the test push.
-      // Since we don't have one deployed, we'll alert the user.
       setSuccess('Test notifications require a Firebase Cloud Function which is not currently deployed in this pure-client setup. Push will work if you deploy a backend sender.');
     } catch (err) {
       console.error(err);
@@ -214,6 +324,8 @@ export default function Settings({ settings, pushSubscriptions, onRefresh }) {
       - fields
     scan_interval: 300`;
 
+  const isSharedHousehold = dbClient.householdId && dbClient.householdId !== dbClient.uid;
+
   return (
     <Box sx={{ p: 1 }}>
       <Typography variant="h4" sx={{ fontWeight: 'bold', mb: 4 }}>Settings</Typography>
@@ -222,7 +334,7 @@ export default function Settings({ settings, pushSubscriptions, onRefresh }) {
       {success && <Alert severity="success" sx={{ mb: 3 }}>{success}</Alert>}
 
       <Grid container spacing={4}>
-        {/* Core Preferences Card */}
+        {/* Left Column: Preferences, Push */}
         <Grid item xs={12} md={6}>
           <Paper sx={{ p: 3, mb: 4, borderRadius: 4 }}>
             <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 3 }}>Preferences</Typography>
@@ -271,7 +383,6 @@ export default function Settings({ settings, pushSubscriptions, onRefresh }) {
             </Box>
           </Paper>
 
-          {/* Notifications config */}
           <Paper sx={{ p: 3, borderRadius: 4 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
               <PushIcon color="primary" />
@@ -309,8 +420,124 @@ export default function Settings({ settings, pushSubscriptions, onRefresh }) {
           </Paper>
         </Grid>
 
-        {/* Home Assistant card */}
+        {/* Right Column: Household Sharing, Locations, Home Assistant */}
         <Grid item xs={12} md={6}>
+          {/* Household Sharing Card */}
+          <Paper sx={{ p: 3, mb: 4, borderRadius: 4 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+              <GroupIcon color="primary" />
+              <Typography variant="h6" sx={{ fontWeight: 'bold' }}>Household Sharing</Typography>
+            </Box>
+            
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+              Share your inventory with other members of your household. Share your Household ID with them, or join an existing household.
+            </Typography>
+
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 3 }}>
+              <TextField
+                fullWidth
+                label="Your Household ID"
+                value={dbClient.householdId || ''}
+                InputProps={{ readOnly: true }}
+                helperText="Copy and send this ID to invite others to your household."
+              />
+              <IconButton 
+                color="primary" 
+                onClick={() => copyToClipboard(dbClient.householdId || '')}
+                sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2, p: 1.5 }}
+              >
+                <CopyIcon />
+              </IconButton>
+            </Box>
+
+            {members.length > 0 && (
+              <Box sx={{ mb: 3 }}>
+                <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 1 }}>Household Members:</Typography>
+                <List dense sx={{ bgcolor: 'action.hover', borderRadius: 2 }}>
+                  {members.map((m) => (
+                    <ListItem key={m.uid}>
+                      <ListItemText 
+                        primary={m.displayName || 'Unnamed User'} 
+                        secondary={m.email || 'No email provided'} 
+                      />
+                      {m.uid === dbClient.uid && (
+                        <ListItemSecondaryAction>
+                          <Typography variant="caption" color="text.secondary">(You)</Typography>
+                        </ListItemSecondaryAction>
+                      )}
+                    </ListItem>
+                  ))}
+                </List>
+              </Box>
+            )}
+
+            <Box component="form" onSubmit={handleJoinHousehold} sx={{ display: 'flex', gap: 1, mb: 2 }}>
+              <TextField
+                fullWidth
+                label="Join Household ID"
+                placeholder="Paste Household ID here"
+                value={targetHouseholdId}
+                onChange={(e) => setTargetHouseholdId(e.target.value)}
+              />
+              <Button type="submit" variant="contained" disabled={loading || !targetHouseholdId.trim()}>
+                Join
+              </Button>
+            </Box>
+
+            {isSharedHousehold && (
+              <Button 
+                variant="outlined" 
+                color="error" 
+                startIcon={<LeaveIcon />} 
+                onClick={handleLeaveHousehold}
+                disabled={loading}
+                fullWidth
+              >
+                Leave Shared Household
+              </Button>
+            )}
+          </Paper>
+
+          {/* Dynamic Locations Card */}
+          <Paper sx={{ p: 3, mb: 4, borderRadius: 4 }}>
+            <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 1 }}>Storage Locations</Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+              Customize where you store food in your household.
+            </Typography>
+
+            <List dense sx={{ mb: 2 }}>
+              {currentLocations.map((loc) => (
+                <ListItem key={loc} divider>
+                  <ListItemText primary={loc} />
+                  <ListItemSecondaryAction>
+                    <IconButton 
+                      edge="end" 
+                      color="error" 
+                      onClick={() => handleDeleteLocation(loc)}
+                      disabled={currentLocations.length <= 1 || loading}
+                    >
+                      <DeleteIcon />
+                    </IconButton>
+                  </ListItemSecondaryAction>
+                </ListItem>
+              ))}
+            </List>
+
+            <Box component="form" onSubmit={handleAddLocation} sx={{ display: 'flex', gap: 1 }}>
+              <TextField
+                fullWidth
+                label="New Location Name"
+                value={newLocationName}
+                onChange={(e) => setNewLocationName(e.target.value)}
+                placeholder="e.g. Wine Cellar"
+              />
+              <Button type="submit" variant="contained" startIcon={<AddIcon />} disabled={loading || !newLocationName.trim()}>
+                Add
+              </Button>
+            </Box>
+          </Paper>
+
+          {/* Home Assistant Card */}
           <Paper sx={{ p: 3, borderRadius: 4 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
               <HAIcon color="primary" />

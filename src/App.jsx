@@ -23,7 +23,7 @@ export default function App() {
   // Theme state
   const [darkMode, setDarkMode] = useState(() => {
     const saved = localStorage.getItem('foodex_theme');
-    return saved ? saved === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches;
+    return saved ? saved === 'dark' : true;
   });
 
   // Product Modals
@@ -132,12 +132,14 @@ export default function App() {
               {currentTab === 'dashboard' && (
                 <Dashboard 
                   products={db.products || []} 
+                  settings={db.settings || {}}
                   onAddProductClick={handleAddProductClick} 
                 />
               )}
               {currentTab === 'inventory' && (
                 <Inventory 
                   products={db.products || []}
+                  settings={db ? db.settings : {}}
                   onEditProduct={handleEditProduct}
                   onAddProductClick={handleAddProductClick}
                   onRefresh={fetchDatabase}
@@ -158,6 +160,7 @@ export default function App() {
           open={productModalOpen} 
           onClose={() => setProductModalOpen(false)} 
           product={editProduct}
+          settings={db ? db.settings : {}}
           onSuccess={fetchDatabase}
         />
       </Box>

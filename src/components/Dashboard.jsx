@@ -12,7 +12,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid
 } from 'recharts';
 
-export default function Dashboard({ products, onAddProductClick }) {
+export default function Dashboard({ products, settings, onAddProductClick }) {
   const theme = useTheme();
 
   const stats = useMemo(() => {
@@ -27,7 +27,11 @@ export default function Dashboard({ products, onAddProductClick }) {
     let expiredCount = 0;
     let expiringSoonCount = 0;
 
-    const locationCounts = { Fridge: 0, Pantry: 0, Freezer: 0 };
+    const defaultLocations = settings.locations || ['Fridge', 'Freezer'];
+    const locationCounts = {};
+    defaultLocations.forEach(loc => {
+      locationCounts[loc] = 0;
+    });
     
     active.forEach(p => {
       if (p.expirationDate) {
@@ -41,7 +45,8 @@ export default function Dashboard({ products, onAddProductClick }) {
         }
       }
 
-      const loc = p.location || 'Fridge';
+      const defaultLoc = defaultLocations[0] || 'Fridge';
+      const loc = p.location || defaultLoc;
       if (locationCounts[loc] !== undefined) {
         locationCounts[loc]++;
       } else {
