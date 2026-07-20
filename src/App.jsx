@@ -134,14 +134,7 @@ export default function App() {
                   products={db.products || []} 
                   settings={db.settings || {}}
                   onAddProductClick={handleAddProductClick} 
-                />
-              )}
-              {currentTab === 'inventory' && (
-                <Inventory 
-                  products={db.products || []}
-                  settings={db ? db.settings : {}}
                   onEditProduct={handleEditProduct}
-                  onAddProductClick={handleAddProductClick}
                   onRefresh={fetchDatabase}
                 />
               )}
