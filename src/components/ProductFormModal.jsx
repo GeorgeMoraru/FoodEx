@@ -34,6 +34,7 @@ export default function ProductFormModal({ open, onClose, product, onSuccess }) 
   
   // Scanner Modal state (for scanning dates)
   const [scannerOpen, setScannerOpen] = useState(false);
+  const [flash, setFlash] = useState(false);
 
   // FoodKeeper suggestions dataset
   const [foodkeeper, setFoodkeeper] = useState([]);
@@ -130,15 +131,18 @@ export default function ProductFormModal({ open, onClose, product, onSuccess }) 
         video: { facingMode: 'environment' }
       });
       streamRef.current = mediaStream;
-      if (videoRef.current) {
-        videoRef.current.srcObject = mediaStream;
-      }
     } catch (err) {
       console.error('Webcam capture access denied:', err);
       setError('Could not access webcam for product photo.');
       setCameraActive(false);
     }
   };
+
+  useEffect(() => {
+    if (cameraActive && videoRef.current && streamRef.current) {
+      videoRef.current.srcObject = streamRef.current;
+    }
+  }, [cameraActive]);
 
   const stopCamera = () => {
     if (streamRef.current) {
@@ -163,7 +167,12 @@ export default function ProductFormModal({ open, onClose, product, onSuccess }) 
     setBase64Image(dataUrl);
     setImagePreview(dataUrl);
     
-    stopCamera();
+    // Visual flash feedback
+    setFlash(true);
+    setTimeout(() => {
+      setFlash(false);
+      stopCamera();
+    }, 150);
   };
 
   const handleSubmit = async (e) => {
@@ -383,10 +392,14 @@ export default function ProductFormModal({ open, onClose, product, onSuccess }) 
 
                 {cameraActive ? (
                   <Box sx={{ position: 'relative', width: '100%', pt: '75%', bgcolor: '#000000', borderRadius: 2, overflow: 'hidden' }}>
+                    {flash && (
+                      <Box sx={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', bgcolor: '#ffffff', zIndex: 10 }} />
+                    )}
                     <video 
                       ref={videoRef} 
                       autoPlay 
                       playsInline 
+                      muted
                       style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'cover' }}
                     />
                     <Box sx={{ position: 'absolute', bottom: 16, left: 0, width: '100%', display: 'flex', justifyContent: 'center', gap: 2 }}>

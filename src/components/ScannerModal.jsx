@@ -27,14 +27,18 @@ export default function ScannerModal({ open, onClose, onDateScanned }) {
       };
       const mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
       setStream(mediaStream);
-      if (videoRef.current) {
-        videoRef.current.srcObject = mediaStream;
-      }
     } catch (err) {
       console.error('Error starting camera:', err);
       setError('Could not access your camera. Please ensure permissions are granted.');
     }
   };
+
+  // Attach stream to video element safely
+  useEffect(() => {
+    if (videoRef.current && stream) {
+      videoRef.current.srcObject = stream;
+    }
+  }, [stream]);
 
   // Stop Camera
   const stopCamera = () => {
@@ -221,22 +225,21 @@ export default function ScannerModal({ open, onClose, onDateScanned }) {
 
         {/* Camera Feed & Canvas */}
         <Box sx={{ position: 'relative', width: '100%', pt: '75%', bgcolor: '#000000' }}>
-          {stream && (
-            <video 
-              ref={videoRef} 
-              autoPlay 
-              playsInline 
-              muted 
-              style={{ 
-                position: 'absolute', 
-                top: 0, 
-                left: 0, 
-                width: '100%', 
-                height: '100%', 
-                objectFit: 'cover' 
-              }}
-            />
-          )}
+          <video 
+            ref={videoRef} 
+            autoPlay 
+            playsInline 
+            muted 
+            style={{ 
+              position: 'absolute', 
+              top: 0, 
+              left: 0, 
+              width: '100%', 
+              height: '100%', 
+              objectFit: 'cover',
+              display: stream ? 'block' : 'none'
+            }}
+          />
 
           {/* Alignment Finder Grid Overlay */}
           <Box sx={{
