@@ -2,24 +2,20 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     
-    // Users can read/write their own document. 
-    // They can read other user documents if they share the same householdId.
+    // Users can read any user profile if authenticated (names, emails, household IDs)
+    // but can only write to their own profile.
     match /users/{userId} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
-      allow read: if request.auth != null && 
-        userId != request.auth.uid &&
-        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.householdId == resource.data.householdId;
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && request.auth.uid == userId;
     }
     
     // Households can be read/written if:
-    // 1. It is the user's own default household (ID matches their UID) - bypasses DB lookup to prevent race conditions on first sign-in.
+    // 1. It is the user's own default household (ID matches their UID) - prevents race conditions.
     // 2. The user's profile document has householdId matching the household.
     match /households/{householdId} {
       allow read, write: if request.auth != null && (
         householdId == request.auth.uid ||
-        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.householdId == householdId)
+        get(/databases/(default)/documents/users/$(request.auth.uid)).data.householdId == householdId
       );
     }
     
