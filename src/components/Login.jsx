@@ -4,9 +4,8 @@ import {
   Alert, CircularProgress, Divider
 } from '@mui/material';
 import GoogleIcon from '@mui/icons-material/Google';
-import GitHubIcon from '@mui/icons-material/GitHub';
 import { signInWithPopup, browserPopupRedirectResolver } from 'firebase/auth';
-import { auth, googleProvider, githubProvider } from '../utils/firebase';
+import { auth, googleProvider } from '../utils/firebase';
 import dbClient from '../utils/dbClient';
 
 export default function Login({ onLoginSuccess }) {
@@ -79,40 +78,17 @@ export default function Login({ onLoginSuccess }) {
             </Alert>
           )}
 
-          <Box sx={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 2 }}>
-            <Button
-              fullWidth
-              variant="outlined"
-              size="large"
-              disabled={loading}
-              onClick={() => handleLogin(googleProvider)}
-              startIcon={<GoogleIcon />}
-              sx={{ py: 1.5, borderRadius: 2, fontWeight: 700, borderColor: 'divider', color: 'text.primary' }}
-            >
-              Sign in with Google
-            </Button>
-            
-            <Button
-              fullWidth
-              variant="contained"
-              size="large"
-              disabled={loading}
-              onClick={() => handleLogin(githubProvider)}
-              startIcon={<GitHubIcon />}
-              sx={{
-                py: 1.5,
-                borderRadius: 2,
-                fontWeight: 700,
-                bgcolor: theme => theme.palette.mode === 'dark' ? '#238636' : '#24292f',
-                color: '#ffffff',
-                '&:hover': {
-                  bgcolor: theme => theme.palette.mode === 'dark' ? '#2ea043' : '#000000',
-                }
-              }}
-            >
-              Sign in with GitHub
-            </Button>
-          </Box>
+          <Button
+            fullWidth
+            variant="contained"
+            size="large"
+            disabled={loading}
+            onClick={() => handleLogin(googleProvider)}
+            startIcon={<GoogleIcon />}
+            sx={{ py: 1.5, borderRadius: 2, fontWeight: 700 }}
+          >
+            Sign in with Google
+          </Button>
           
           {loading && (
             <Box sx={{ mt: 3, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>

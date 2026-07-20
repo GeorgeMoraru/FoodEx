@@ -1,1 +1,0 @@
-fix: revert to PAT auth due to GitHub CORS policy on device flow, but simplify UX to only require PAT (auto-discover username)

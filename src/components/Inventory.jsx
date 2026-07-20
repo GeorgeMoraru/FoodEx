@@ -23,7 +23,7 @@ export default function Inventory({ products, onEditProduct, onAddProductClick, 
 
   const handleUpdateStatus = async (productId, status) => {
     try {
-      await gitHubClient.updateDb((db) => {
+      await dbClient.updateDb((db) => {
         const prod = db.products.find(p => p.id === productId);
         if (prod) {
           prod.status = status;

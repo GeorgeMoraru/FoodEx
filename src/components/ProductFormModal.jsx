@@ -55,15 +55,12 @@ export default function ProductFormModal({ open, onClose, product, onSuccess }) 
         setLocation(product.location || 'Fridge');
         setAddedDate(product.addedDate ? new Date(product.addedDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]);
         setExpirationDate(product.expirationDate ? new Date(product.expirationDate).toISOString().split('T')[0] : '');
-        setBase64Image(null);
         setImagePreview(product.imageUrl || '');
       } else {
         setName('');
         setQuantity('1');
         setUnit('pcs');
         setLocation('Fridge');
-        setAddedDate(new Date().toISOString().split('T')[0]);
-        setExpirationDate('');
         setAddedDate(new Date().toISOString().split('T')[0]);
         setExpirationDate('');
         setImagePreview('');
