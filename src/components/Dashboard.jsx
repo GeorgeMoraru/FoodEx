@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { 
   Box, Grid, Paper, Typography, Card, CardContent, 
   Button, useTheme, Collapse, List, ListItem, 
-  Divider, IconButton, Chip
+  Divider, IconButton, Chip, Tooltip
 } from '@mui/material';
 import { 
   Add as AddIcon, Warning as WarningIcon, 
