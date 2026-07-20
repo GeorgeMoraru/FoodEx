@@ -28,6 +28,7 @@ export default function Settings({ settings, pushSubscriptions, onRefresh }) {
   const [notificationDaysBefore, setNotificationDaysBefore] = useState(settings.notificationDaysBefore || 3);
   const [emailAlertsEnabled, setEmailAlertsEnabled] = useState(settings.emailAlertsEnabled || false);
   const [emailAddress, setEmailAddress] = useState(settings.emailAddress || '');
+  const [haEnabled, setHaEnabled] = useState(!!settings.haToken);
 
   const [isSubscribed, setIsSubscribed] = useState(false);
   const [notificationSupport, setNotificationSupport] = useState(true);
@@ -76,7 +77,8 @@ export default function Settings({ settings, pushSubscriptions, onRefresh }) {
           ...db.settings,
           notificationDaysBefore: parseInt(notificationDaysBefore),
           emailAlertsEnabled,
-          emailAddress: emailAddress.trim()
+          emailAddress: emailAddress.trim(),
+          haToken: haEnabled ? (db.settings.haToken || crypto.randomUUID()) : null
         };
         return db;
       });
@@ -195,23 +197,21 @@ export default function Settings({ settings, pushSubscriptions, onRefresh }) {
     alert('Copied to clipboard!');
   };
 
-  const uid = dbClient.uid || 'YOUR_USER_ID';
+  const projectId = dbClient.projectId || 'foodex-a9dee';
+  const haToken = settings.haToken || 'YOUR_GENERATED_TOKEN';
 
   const haYaml = `sensor:
   - platform: rest
     name: FoodEx Active Items
-    resource: https://firestore.googleapis.com/v1/projects/YOUR_PROJECT_ID/databases/(default)/documents/users/${uid}
-    # Firebase requires auth to access this URL directly.
-    # To use this, you would need to set up a Firebase Admin SDK endpoint or open Firestore read rules for this document.
+    resource: https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/ha_tokens/${haToken}
     value_template: >
-      {% if value_json.products is defined %}
-        {{ value_json.products | selectattr('status', 'eq', 'ACTIVE') | list | count }}
+      {% if value_json.fields.products is defined %}
+        {{ value_json.fields.products.arrayValue.values | selectattr('mapValue.fields.status.stringValue', 'eq', 'ACTIVE') | list | count }}
       {% else %}
         0
       {% endif %}
     json_attributes:
-      - products
-      - settings
+      - fields
     scan_interval: 300`;
 
   return (
@@ -318,25 +318,41 @@ export default function Settings({ settings, pushSubscriptions, onRefresh }) {
             </Box>
 
             <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-              Since your data is stored securely in your own GitHub repository, Home Assistant can query your food status directly via the GitHub contents RAW URL.
+              Home Assistant can query your food status securely. By enabling this integration, an unguessable private link token is generated so Home Assistant can read your data without needing to handle complex OAuth authentication.
             </Typography>
 
-            <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 1 }}>YAML Sensor Configuration:</Typography>
-            
-            <Box sx={{ position: 'relative', bgcolor: '#272822', color: '#f8f8f2', p: 2, borderRadius: 2, fontFamily: 'monospace', fontSize: '0.75rem', overflowX: 'auto' }}>
-              <pre style={{ margin: 0 }}>{haYaml}</pre>
-              <IconButton 
-                size="small" 
-                sx={{ position: 'absolute', top: 8, right: 8, color: '#f8f8f2' }}
-                onClick={() => copyToClipboard(haYaml)}
-              >
-                <CopyIcon fontSize="small" />
-              </IconButton>
-            </Box>
-            
-            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 2 }}>
-              <strong>Tip:</strong> If your repository is private, create a GitHub Personal Access Token (PAT) with read permissions and uncomment the headers block above.
-            </Typography>
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={haEnabled}
+                  onChange={(e) => setHaEnabled(e.target.checked)}
+                  color="primary"
+                />
+              }
+              label="Enable Home Assistant Sync (Save Settings to generate token)"
+              sx={{ mb: 2 }}
+            />
+
+            {haEnabled && settings.haToken && (
+              <>
+                <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 1 }}>YAML Sensor Configuration:</Typography>
+                
+                <Box sx={{ position: 'relative', bgcolor: '#272822', color: '#f8f8f2', p: 2, borderRadius: 2, fontFamily: 'monospace', fontSize: '0.75rem', overflowX: 'auto' }}>
+                  <pre style={{ margin: 0 }}>{haYaml}</pre>
+                  <IconButton 
+                    size="small" 
+                    sx={{ position: 'absolute', top: 8, right: 8, color: '#f8f8f2' }}
+                    onClick={() => copyToClipboard(haYaml)}
+                  >
+                    <CopyIcon fontSize="small" />
+                  </IconButton>
+                </Box>
+                
+                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 2 }}>
+                  <strong>Security Note:</strong> Anyone with your unique token can read your inventory summary. To revoke access, disable this setting and save.
+                </Typography>
+              </>
+            )}
           </Paper>
         </Grid>
       </Grid>

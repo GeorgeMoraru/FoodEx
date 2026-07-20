@@ -1,0 +1,17 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Users can only read and write their own data
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+    
+    // Home Assistant tokens are unguessable UUIDs. 
+    // Anyone with the exact UUID can read the summary data.
+    match /ha_tokens/{tokenId} {
+      allow read: if true;
+      allow write: if request.auth != null;
+    }
+  }
+}

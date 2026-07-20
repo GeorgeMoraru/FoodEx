@@ -101,6 +101,18 @@ class DbClient {
 
       const updatedDb = updateFn(db);
       transaction.set(this.userRef, updatedDb);
+      
+      // Mirror to Home Assistant token document if enabled
+      if (updatedDb.settings && updatedDb.settings.haToken) {
+        const haRef = doc(firestore, 'ha_tokens', updatedDb.settings.haToken);
+        // Only mirror the products and basic settings to keep HA fast and secure
+        transaction.set(haRef, {
+          products: updatedDb.products,
+          settings: {
+            notificationDaysBefore: updatedDb.settings.notificationDaysBefore
+          }
+        });
+      }
     });
     return { db: null, sha: 'firestore' };
   }
