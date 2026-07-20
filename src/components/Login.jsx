@@ -80,8 +80,8 @@ export default function Login({ onLoginSuccess }) {
         justifyContent: 'center',
         background: theme =>
           theme.palette.mode === 'dark'
-            ? 'linear-gradient(135deg, #0d1117 0%, #161b22 50%, #0d2818 100%)'
-            : 'linear-gradient(135deg, #f0fdf4 0%, #dcfce7 50%, #f0f9ff 100%)',
+            ? 'linear-gradient(135deg, #0d1117 0%, #161b22 50%, #0d1828 100%)'
+            : 'linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 50%, #bae6fd 100%)',
         px: 2,
       }}
     >
@@ -148,10 +148,10 @@ export default function Login({ onLoginSuccess }) {
                 fontWeight: 700,
                 borderRadius: 2,
                 background: theme =>
-                  theme.palette.mode === 'dark' ? '#238636' : 'primary.main',
+                  theme.palette.mode === 'dark' ? '#1976d2' : 'primary.main',
                 '&:hover': {
                   background: theme =>
-                    theme.palette.mode === 'dark' ? '#2ea043' : undefined,
+                    theme.palette.mode === 'dark' ? '#1565c0' : undefined,
                 },
               }}
             >
