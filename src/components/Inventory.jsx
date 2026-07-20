@@ -1,23 +1,24 @@
 import React, { useState, useMemo } from 'react';
 import { 
   Box, Typography, Grid, Card, CardContent, IconButton, 
-  Button, TextField, InputAdornment, Select, MenuItem, 
-  FormControl, InputLabel, Tooltip, Chip, Paper, useTheme 
+  Button, TextField, InputAdornment, Tooltip, Chip, Paper, useTheme,
+  Tabs, Tab, CardActions
 } from '@mui/material';
 import { 
   Search as SearchIcon, CheckCircle as CheckIcon,
   DeleteForever as DeleteIcon, Edit as EditIcon,
   Cancel as CancelIcon, Kitchen as FridgeIcon, 
   LocalMall as PantryIcon, AcUnit as FreezerIcon, 
-  Info as InfoIcon 
+  Info as InfoIcon, Restore as RestoreIcon
 } from '@mui/icons-material';
 import dbClient from '../utils/dbClient';
 
 export default function Inventory({ products, settings, onEditProduct, onAddProductClick, onRefresh }) {
-  // Search & Filter State
   const [search, setSearch] = useState('');
   const [locationFilter, setLocationFilter] = useState('All');
-  const [statusFilter, setStatusFilter] = useState('ACTIVE');
+  
+  // Tab State: 0: Active Inventory, 1: History Log
+  const [tabValue, setTabValue] = useState(0);
 
   const theme = useTheme();
 
@@ -41,21 +42,15 @@ export default function Inventory({ products, settings, onEditProduct, onAddProd
     const prodToDelete = products.find(p => p.id === productId);
     if (!prodToDelete) return;
 
-    if (!window.confirm('Are you sure you want to delete this product? This will also delete any uploaded image.')) {
+    if (!window.confirm('Are you sure you want to delete this product?')) {
       return;
     }
     
     try {
-      if (prodToDelete.imagePath) {
-        // External URLs or deleted logic
-      }
-
-      // Remove from database
       await dbClient.updateDb((db) => {
         db.products = db.products.filter(p => p.id !== productId);
         return db;
       });
-
       onRefresh();
     } catch (err) {
       console.error('Delete product error:', err);
@@ -139,16 +134,17 @@ export default function Inventory({ products, settings, onEditProduct, onAddProd
     }
   };
 
+  const locationsList = settings.locations || ['Fridge', 'Freezer'];
+
   // Filter and Sort products client-side
   const filteredProducts = useMemo(() => {
     let result = [...products];
 
-    // Filter by status
-    if (statusFilter !== 'ALL') {
-      result = result.filter(p => {
-        const status = p.status || 'ACTIVE';
-        return status === statusFilter;
-      });
+    // Filter by tab status (0: Active Inventory, 1: History Log)
+    if (tabValue === 0) {
+      result = result.filter(p => (p.status || 'ACTIVE') === 'ACTIVE');
+    } else {
+      result = result.filter(p => (p.status || 'ACTIVE') !== 'ACTIVE');
     }
 
     // Filter by location
@@ -158,8 +154,8 @@ export default function Inventory({ products, settings, onEditProduct, onAddProd
 
     // Filter by search term
     if (search.trim()) {
-      const query = search.toLowerCase();
-      result = result.filter(p => p.name.toLowerCase().includes(query));
+      const queryStr = search.toLowerCase();
+      result = result.filter(p => p.name.toLowerCase().includes(queryStr));
     }
 
     // Sort by expiration date (earliest first), put non-perishables at the end
@@ -171,89 +167,98 @@ export default function Inventory({ products, settings, onEditProduct, onAddProd
     });
 
     return result;
-  }, [products, statusFilter, locationFilter, search]);
+  }, [products, tabValue, locationFilter, search]);
 
   return (
     <Box sx={{ p: 1 }}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 2, alignItems: 'center', mb: 4 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 2, alignItems: 'center', mb: 3 }}>
         <Box>
           <Typography variant="h4" sx={{ fontWeight: 'bold' }}>Inventory</Typography>
-          <Typography variant="body1" color="text.secondary">
-            Manage your food catalog
+          <Typography variant="body2" color="text.secondary">
+            Manage your household food catalog
           </Typography>
         </Box>
         <Button 
           variant="contained" 
           onClick={onAddProductClick}
-          sx={{ py: 1, px: 3 }}
+          sx={{ py: 1, px: 3, borderRadius: 2 }}
         >
           Add New Product
         </Button>
       </Box>
 
-      {/* Search and Filters bar */}
-      <Grid container spacing={2} sx={{ mb: 4 }}>
-        <Grid item xs={12} sm={4}>
-          <TextField
-            fullWidth
-            placeholder="Search food name..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            InputProps={{
-              startAdornment: (
-                <InputAdornment position="start">
-                  <SearchIcon color="action" />
-                </InputAdornment>
-              ),
-            }}
+      {/* Tabs segment: Active vs History */}
+      <Tabs 
+        value={tabValue} 
+        onChange={(e, nv) => setTabValue(nv)} 
+        sx={{ mb: 3, borderBottom: '1px solid', borderColor: 'divider' }}
+        textColor="primary"
+        indicatorColor="primary"
+      >
+        <Tab label="Active Inventory" sx={{ fontWeight: 'bold' }} />
+        <Tab label="History / Logs" sx={{ fontWeight: 'bold' }} />
+      </Tabs>
+
+      {/* Search & Location Chip Filters */}
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mb: 4 }}>
+        <TextField
+          fullWidth
+          placeholder="Search food name..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          InputProps={{
+            startAdornment: (
+              <InputAdornment position="start">
+                <SearchIcon color="action" />
+              </InputAdornment>
+            ),
+          }}
+        />
+
+        {/* Location Chips Filter */}
+        <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'center' }}>
+          <Typography variant="body2" color="text.secondary" sx={{ mr: 1, fontWeight: 'bold' }}>
+            Location:
+          </Typography>
+          <Chip
+            label="All Locations"
+            clickable
+            color={locationFilter === 'All' ? 'primary' : 'default'}
+            variant={locationFilter === 'All' ? 'filled' : 'outlined'}
+            onClick={() => setLocationFilter('All')}
+            sx={{ fontWeight: '500' }}
           />
-        </Grid>
-
-        <Grid item xs={6} sm={4}>
-          <FormControl fullWidth>
-            <InputLabel>Location</InputLabel>
-            <Select
-              value={locationFilter}
-              label="Location"
-              onChange={(e) => setLocationFilter(e.target.value)}
-            >
-              <MenuItem value="All">All Locations</MenuItem>
-              {(settings.locations || ['Fridge', 'Freezer']).map(loc => (
-                <MenuItem key={loc} value={loc}>{loc}</MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-        </Grid>
-
-        <Grid item xs={6} sm={4}>
-          <FormControl fullWidth>
-            <InputLabel>Status</InputLabel>
-            <Select
-              value={statusFilter}
-              label="Status"
-              onChange={(e) => setStatusFilter(e.target.value)}
-            >
-              <MenuItem value="ACTIVE">Active Inventory</MenuItem>
-              <MenuItem value="CONSUMED">Consumed History</MenuItem>
-              <MenuItem value="WASTED">Wasted History</MenuItem>
-              <MenuItem value="ALL">All Items</MenuItem>
-            </Select>
-          </FormControl>
-        </Grid>
-      </Grid>
+          {locationsList.map((loc) => (
+            <Chip
+              key={loc}
+              icon={getLocationIcon(loc)}
+              label={loc}
+              clickable
+              color={locationFilter === loc ? 'primary' : 'default'}
+              variant={locationFilter === loc ? 'filled' : 'outlined'}
+              onClick={() => setLocationFilter(loc)}
+              sx={{ fontWeight: '500' }}
+            />
+          ))}
+        </Box>
+      </Box>
 
       {filteredProducts.length === 0 ? (
-        <Paper sx={{ p: 6, textAlign: 'center', bgcolor: 'background.paper', borderRadius: 4 }}>
+        <Paper sx={{ p: 6, textAlign: 'center', bgcolor: 'background.paper', borderRadius: 4, border: '1px solid', borderColor: 'divider' }}>
           <Typography variant="h6" color="text.secondary" gutterBottom>
-            No products found
+            No food items found
           </Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-            Try adjusting your search filters or add a new food item.
+            {tabValue === 0 
+              ? "Your active inventory is empty. Add a new product to get started!"
+              : "No consumption or waste log entries match your filters."}
           </Typography>
-          <Button variant="outlined" onClick={onAddProductClick}>Add Product</Button>
+          {tabValue === 0 && (
+            <Button variant="outlined" onClick={onAddProductClick}>Add Product</Button>
+          )}
         </Paper>
       ) : (
-        /* Pinterest / Plex Grid View */
+        /* Native Grid Cards with direct action buttons */
         <Grid container spacing={3}>
           {filteredProducts.map((p) => {
             const isActive = (p.status || 'ACTIVE') === 'ACTIVE';
@@ -267,14 +272,14 @@ export default function Inventory({ products, settings, onEditProduct, onAddProd
                     display: 'flex',
                     flexDirection: 'column',
                     overflow: 'hidden',
+                    borderRadius: 3,
+                    border: '1px solid',
+                    borderColor: 'divider',
+                    boxShadow: 'none',
                     transition: 'transform 0.2s ease, box-shadow 0.2s ease',
                     '&:hover': {
-                      transform: 'translateY(-4px)',
-                      boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
-                    },
-                    '&:hover .quick-actions-overlay': {
-                      opacity: 1,
-                      transform: 'translateY(0)'
+                      transform: 'translateY(-2px)',
+                      boxShadow: '0 6px 20px rgba(0,0,0,0.12)',
                     }
                   }}
                 >
@@ -287,13 +292,13 @@ export default function Inventory({ products, settings, onEditProduct, onAddProd
                         left: 12, 
                         bgcolor: badge.color, 
                         color: badge.textColor,
-                        px: 1.5,
-                        py: 0.5,
-                        borderRadius: 1,
-                        fontSize: '0.75rem',
+                        px: 1.2,
+                        py: 0.4,
+                        borderRadius: 1.5,
+                        fontSize: '0.7rem',
                         fontWeight: 'bold',
                         zIndex: 10,
-                        boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
+                        boxShadow: '0 2px 4px rgba(0,0,0,0.15)'
                       }}
                     >
                       {badge.text}
@@ -310,16 +315,19 @@ export default function Inventory({ products, settings, onEditProduct, onAddProd
                       top: 12, 
                       right: 12, 
                       zIndex: 10,
-                      bgcolor: 'rgba(255,255,255,0.85)',
-                      color: '#000000',
+                      bgcolor: theme => theme.palette.mode === 'dark' ? 'rgba(30,30,30,0.9)' : 'rgba(255,255,255,0.9)',
+                      color: 'text.primary',
                       backdropFilter: 'blur(4px)',
-                      fontWeight: '500',
-                      boxShadow: '0 2px 4px rgba(0,0,0,0.15)'
+                      fontWeight: 'bold',
+                      fontSize: '0.75rem',
+                      border: '1px solid',
+                      borderColor: 'divider',
+                      boxShadow: '0 2px 4px rgba(0,0,0,0.08)'
                     }} 
                   />
 
                   {/* Image Container */}
-                  <Box sx={{ position: 'relative', width: '100%', pt: '75%', bgcolor: theme.palette.mode === 'light' ? '#eaefe8' : '#252924', overflow: 'hidden' }}>
+                  <Box sx={{ position: 'relative', width: '100%', pt: '70%', bgcolor: theme.palette.mode === 'light' ? '#eaefe8' : '#252924', overflow: 'hidden' }}>
                     {p.imageUrl ? (
                       <img 
                         src={p.imageUrl} 
@@ -350,91 +358,19 @@ export default function Inventory({ products, settings, onEditProduct, onAddProd
                         {getFoodEmoji(p.name)}
                       </Box>
                     )}
-
-                    {/* Quick actions overlay - Visible on Hover */}
-                    <Box 
-                      className="quick-actions-overlay"
-                      sx={{
-                        position: 'absolute',
-                        bottom: 0,
-                        left: 0,
-                        width: '100%',
-                        bgcolor: 'rgba(0,0,0,0.75)',
-                        backdropFilter: 'blur(3px)',
-                        display: 'flex',
-                        justifyContent: 'space-around',
-                        py: 1,
-                        opacity: 0,
-                        transform: 'translateY(100%)',
-                        transition: 'opacity 0.25s ease, transform 0.25s ease',
-                        zIndex: 20
-                      }}
-                    >
-                      {isActive && (
-                        <>
-                          <Tooltip title="Consume (Mark as Eaten)">
-                            <IconButton 
-                              onClick={() => handleUpdateStatus(p.id, 'CONSUMED')}
-                              sx={{ color: '#2ecc71', '&:hover': { bgcolor: 'rgba(46,204,113,0.2)' } }}
-                            >
-                              <CheckIcon />
-                            </IconButton>
-                          </Tooltip>
-
-                          <Tooltip title="Waste (Mark as Discarded)">
-                            <IconButton 
-                              onClick={() => handleUpdateStatus(p.id, 'WASTED')}
-                              sx={{ color: '#e67e22', '&:hover': { bgcolor: 'rgba(230,126,34,0.2)' } }}
-                            >
-                              <CancelIcon />
-                            </IconButton>
-                          </Tooltip>
-                        </>
-                      )}
-
-                      {!isActive && (
-                        <Tooltip title="Restore to Active">
-                          <Button 
-                            size="small"
-                            variant="outlined"
-                            onClick={() => handleUpdateStatus(p.id, 'ACTIVE')}
-                            sx={{ color: '#ffffff', borderColor: '#ffffff', '&:hover': { bgcolor: 'rgba(255,255,255,0.1)' } }}
-                          >
-                            Restore
-                          </Button>
-                        </Tooltip>
-                      )}
-
-                      <Tooltip title="Edit Product">
-                        <IconButton 
-                          onClick={() => onEditProduct(p)}
-                          sx={{ color: '#3498db', '&:hover': { bgcolor: 'rgba(52,152,219,0.2)' } }}
-                        >
-                          <EditIcon />
-                        </IconButton>
-                      </Tooltip>
-
-                      <Tooltip title="Delete Product Permanently">
-                        <IconButton 
-                          onClick={() => handleDeleteProduct(p.id)}
-                          sx={{ color: '#e74c3c', '&:hover': { bgcolor: 'rgba(231,76,60,0.2)' } }}
-                        >
-                          <DeleteIcon />
-                        </IconButton>
-                      </Tooltip>
-                    </Box>
                   </Box>
 
+                  {/* Content details */}
                   <CardContent sx={{ flexGrow: 1, p: 2, display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-                    <Typography variant="h6" component="h3" noWrap sx={{ fontWeight: 'bold', fontSize: '1rem' }} title={p.name}>
+                    <Typography variant="h6" component="h3" noWrap sx={{ fontWeight: 'bold', fontSize: '0.95rem' }} title={p.name}>
                       {p.name}
                     </Typography>
                     
-                    <Typography variant="body2" color="text.secondary">
+                    <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.85rem' }}>
                       Quantity: <strong>{p.quantity} {p.unit}</strong>
                     </Typography>
 
-                    <Typography variant="caption" color="text.secondary" sx={{ mt: 'auto', display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                    <Typography variant="caption" color="text.secondary" sx={{ mt: 'auto', display: 'flex', alignItems: 'center', gap: 0.5, fontSize: '0.75rem' }}>
                       <InfoIcon fontSize="inherit" />
                       {p.expirationDate ? `Expires: ${new Date(p.expirationDate).toLocaleDateString()}` : 'Does not expire'}
                     </Typography>
@@ -443,11 +379,86 @@ export default function Inventory({ products, settings, onEditProduct, onAddProd
                       <Chip 
                         label={p.status} 
                         size="small" 
-                        color={p.status === 'CONSUMED' ? 'success' : 'default'} 
-                        sx={{ mt: 1, fontWeight: 'bold', height: 20 }}
+                        color={p.status === 'CONSUMED' ? 'success' : 'warning'} 
+                        sx={{ mt: 1, fontWeight: 'bold', height: 22, fontSize: '0.7rem' }}
                       />
                     )}
                   </CardContent>
+
+                  {/* Directly accessible action buttons at bottom of card */}
+                  <CardActions sx={{ justifyContent: 'space-between', borderTop: '1px solid', borderColor: 'divider', px: 1, py: 0.5, bgcolor: 'action.hover' }}>
+                    {isActive ? (
+                      <>
+                        <Box sx={{ display: 'flex', gap: 0.5 }}>
+                          <Tooltip title="Consume (Mark Eaten)">
+                            <IconButton 
+                              size="small"
+                              onClick={() => handleUpdateStatus(p.id, 'CONSUMED')}
+                              sx={{ color: 'success.main', '&:hover': { bgcolor: 'rgba(46,204,113,0.1)' } }}
+                            >
+                              <CheckIcon fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
+
+                          <Tooltip title="Waste (Mark Discarded)">
+                            <IconButton 
+                              size="small"
+                              onClick={() => handleUpdateStatus(p.id, 'WASTED')}
+                              sx={{ color: 'warning.main', '&:hover': { bgcolor: 'rgba(230,126,34,0.1)' } }}
+                            >
+                              <CancelIcon fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
+                        </Box>
+                        
+                        <Box sx={{ display: 'flex', gap: 0.5 }}>
+                          <Tooltip title="Edit Product">
+                            <IconButton 
+                              size="small"
+                              onClick={() => onEditProduct(p)}
+                              sx={{ color: 'info.main', '&:hover': { bgcolor: 'rgba(52,152,219,0.1)' } }}
+                            >
+                              <EditIcon fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
+
+                          <Tooltip title="Delete Permanently">
+                            <IconButton 
+                              size="small"
+                              onClick={() => handleDeleteProduct(p.id)}
+                              sx={{ color: 'error.main', '&:hover': { bgcolor: 'rgba(231,76,60,0.1)' } }}
+                            >
+                              <DeleteIcon fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
+                        </Box>
+                      </>
+                    ) : (
+                      <>
+                        <Tooltip title="Restore to Active Inventory">
+                          <Button 
+                            size="small"
+                            variant="outlined"
+                            startIcon={<RestoreIcon />}
+                            onClick={() => handleUpdateStatus(p.id, 'ACTIVE')}
+                            sx={{ fontSize: '0.75rem', py: 0.2, px: 1 }}
+                          >
+                            Restore
+                          </Button>
+                        </Tooltip>
+
+                        <Tooltip title="Delete Permanently">
+                          <IconButton 
+                            size="small"
+                            onClick={() => handleDeleteProduct(p.id)}
+                            sx={{ color: 'error.main', '&:hover': { bgcolor: 'rgba(231,76,60,0.1)' } }}
+                          >
+                            <DeleteIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                      </>
+                    )}
+                  </CardActions>
                 </Card>
               </Grid>
             );
