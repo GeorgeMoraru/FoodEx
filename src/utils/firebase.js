@@ -2,7 +2,7 @@ import { initializeApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 
-const firebaseConfig = {
+export const firebaseConfig = {
   apiKey: "AIzaSyDpFiagvaW_i7cRFxslzC3pwuPnQoe_UXY",
   authDomain: "foodex-a9dee.firebaseapp.com",
   projectId: "foodex-a9dee",

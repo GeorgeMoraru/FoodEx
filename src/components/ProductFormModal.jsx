@@ -17,7 +17,8 @@ export default function ProductFormModal({ open, onClose, product, onSuccess }) 
   const [name, setName] = useState('');
   const [quantity, setQuantity] = useState('1');
   const [unit, setUnit] = useState('pcs');
-  const [location, setLocation] = useState('Fridge');
+  const locationsList = settings.locations || ['Fridge', 'Freezer'];
+  const [location, setLocation] = useState(locationsList[0] || 'Fridge');
   
   // Dates
   const [addedDate, setAddedDate] = useState(new Date().toISOString().split('T')[0]);
@@ -60,14 +61,14 @@ export default function ProductFormModal({ open, onClose, product, onSuccess }) 
         setName('');
         setQuantity('1');
         setUnit('pcs');
-        setLocation('Fridge');
+        setLocation(locationsList[0] || 'Fridge');
         setAddedDate(new Date().toISOString().split('T')[0]);
         setExpirationDate('');
         setImagePreview('');
       }
       setError('');
     }
-  }, [open, product]);
+  }, [open, product, settings]);
 
   const fetchWikipediaImage = async (query) => {
     try {
@@ -104,7 +105,10 @@ export default function ProductFormModal({ open, onClose, product, onSuccess }) 
       fetchWikipediaImage(match.name);
 
       if (match.defaultLocation) {
-        setLocation(match.defaultLocation);
+        // Only set location if it is in the household's custom locations list
+        if (locationsList.includes(match.defaultLocation)) {
+          setLocation(match.defaultLocation);
+        }
         
         // Auto-calculate expiration date
         const days = match.defaultLocation === 'Fridge' 
@@ -138,6 +142,24 @@ export default function ProductFormModal({ open, onClose, product, onSuccess }) 
 
     setLoading(true);
 
+    // Solve race condition: calculate expiration date synchronously on submit if blank
+    let finalExpirationDate = expirationDate;
+    if (!finalExpirationDate) {
+      const match = foodkeeper.find(f => {
+        const lowerF = f.name.toLowerCase();
+        const lowerS = name.toLowerCase().trim();
+        return lowerF === lowerS || lowerF.split('/').some(part => part.trim() === lowerS);
+      });
+      if (match && match.defaultLocation) {
+        const days = match.defaultLocation === 'Fridge' 
+          ? (match.fridge || 7) 
+          : (match.defaultLocation === 'Pantry' ? (match.pantry || 7) : (match.freezer || 30));
+        const added = addedDate ? new Date(addedDate) : new Date();
+        const exp = new Date(added.getTime() + days * 24 * 60 * 60 * 1000);
+        finalExpirationDate = exp.toISOString().split('T')[0];
+      }
+    }
+
     try {
       await dbClient.updateDb((db) => {
         if (isEdit) {
@@ -150,7 +172,7 @@ export default function ProductFormModal({ open, onClose, product, onSuccess }) 
               unit,
               location,
               addedDate,
-              expirationDate,
+              expirationDate: finalExpirationDate,
               imageUrl: imagePreview || db.products[idx].imageUrl,
               imagePath: null
             };
@@ -163,7 +185,7 @@ export default function ProductFormModal({ open, onClose, product, onSuccess }) 
             unit,
             location,
             addedDate,
-            expirationDate,
+            expirationDate: finalExpirationDate,
             imageUrl: imagePreview || null,
             imagePath: null,
             status: 'ACTIVE'
@@ -280,9 +302,9 @@ export default function ProductFormModal({ open, onClose, product, onSuccess }) 
                     label="Storage Location"
                     onChange={(e) => setLocation(e.target.value)}
                   >
-                    <MenuItem value="Fridge">Fridge</MenuItem>
-                    <MenuItem value="Pantry">Pantry</MenuItem>
-                    <MenuItem value="Freezer">Freezer</MenuItem>
+                    {locationsList.map((loc) => (
+                      <MenuItem key={loc} value={loc}>{loc}</MenuItem>
+                    ))}
                   </Select>
                 </FormControl>
               </Grid>
