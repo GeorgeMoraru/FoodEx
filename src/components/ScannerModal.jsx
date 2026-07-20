@@ -1,7 +1,8 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { 
   Modal, Box, Typography, Button, CircularProgress, 
-  Alert, IconButton, Card, CardActions, CardContent 
+  Alert, IconButton, Card, CardActions, CardContent,
+  Fade
 } from '@mui/material';
 import { Close as CloseIcon, CameraAlt as CameraIcon } from '@mui/icons-material';
 import Tesseract from 'tesseract.js';
@@ -255,117 +256,119 @@ export default function ScannerModal({ open, onClose, onDateScanned }) {
 
   return (
     <Modal open={open} onClose={onClose} aria-labelledby="scanner-modal-title">
-      <Box sx={{
-        position: 'absolute',
-        top: '50%',
-        left: '50%',
-        transform: 'translate(-50%, -50%)',
-        width: { xs: '95%', sm: 500 },
-        bgcolor: 'background.paper',
-        borderRadius: 4,
-        boxShadow: 24,
-        overflow: 'hidden',
-        outline: 'none'
-      }}>
-        {/* Header */}
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', p: 2, bgcolor: 'primary.main', color: '#ffffff' }}>
-          <Typography id="scanner-modal-title" variant="h6" sx={{ fontWeight: 'bold' }}>
-            Scan Expiration Date
-          </Typography>
-          <IconButton onClick={onClose} sx={{ color: '#ffffff' }}>
-            <CloseIcon />
-          </IconButton>
-        </Box>
-
-        {/* Camera Feed & Canvas */}
-        <Box sx={{ position: 'relative', width: '100%', pt: '75%', bgcolor: '#000000' }}>
-          <video 
-            ref={videoRef} 
-            autoPlay 
-            playsInline 
-            muted 
-            style={{ 
-              position: 'absolute', 
-              top: 0, 
-              left: 0, 
-              width: '100%', 
-              height: '100%', 
-              objectFit: 'cover',
-              display: stream ? 'block' : 'none'
-            }}
-          />
-
-          {/* Alignment Finder Grid Overlay */}
-          <Box sx={{
-            position: 'absolute',
-            top: '35%',
-            left: '20%',
-            width: '60%',
-            height: '30%',
-            border: '2px dashed #ffffff',
-            boxShadow: '0 0 0 9999px rgba(0, 0, 0, 0.5)',
-            zIndex: 5,
-            pointerEvents: 'none',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center'
-          }}>
-            <Typography variant="caption" sx={{ color: '#ffffff', bgcolor: 'rgba(0,0,0,0.6)', p: 0.5, borderRadius: 0.5 }}>
-              Align Expiration Date Here
+      <Fade in={open}>
+        <Box sx={{
+          position: 'absolute',
+          top: '50%',
+          left: '50%',
+          transform: 'translate(-50%, -50%)',
+          width: { xs: '95%', sm: 500 },
+          bgcolor: 'background.paper',
+          borderRadius: '4px',
+          boxShadow: 24,
+          overflow: 'hidden',
+          outline: 'none'
+        }}>
+          {/* Header */}
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', p: 2, bgcolor: 'primary.main', color: '#ffffff' }}>
+            <Typography id="scanner-modal-title" variant="h6" sx={{ fontWeight: 'bold' }}>
+              Scan Expiration Date
             </Typography>
+            <IconButton onClick={onClose} sx={{ color: '#ffffff' }}>
+              <CloseIcon />
+            </IconButton>
           </Box>
 
-          <canvas ref={canvasRef} style={{ display: 'none' }} />
-        </Box>
+          {/* Camera Feed & Canvas */}
+          <Box sx={{ position: 'relative', width: '100%', pt: '75%', bgcolor: '#000000' }}>
+            <video 
+              ref={videoRef} 
+              autoPlay 
+              playsInline 
+              muted 
+              style={{ 
+                position: 'absolute', 
+                top: 0, 
+                left: 0, 
+                width: '100%', 
+                height: '100%', 
+                objectFit: 'cover',
+                display: stream ? 'block' : 'none'
+              }}
+            />
 
-        {/* Controls & Results */}
-        <Box sx={{ p: 3, display: 'flex', flexDirection: 'column', gap: 2, alignItems: 'center' }}>
-          {error && <Alert severity="warning" sx={{ width: '100%' }}>{error}</Alert>}
-
-          {loading && (
-            <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1 }}>
-              <CircularProgress size={32} />
-              <Typography variant="body2" color="text.secondary">Reading image text (OCR)...</Typography>
-            </Box>
-          )}
-
-          {ocrText && !foundDate && !loading && (
-            <Box sx={{ width: '100%', bgcolor: 'action.hover', p: 1.5, borderRadius: 1 }}>
-              <Typography variant="caption" color="text.secondary" display="block">Detected text:</Typography>
-              <Typography variant="body2" sx={{ fontFamily: 'monospace', wordBreak: 'break-all' }}>
-                {ocrText}
+            {/* Alignment Finder Grid Overlay */}
+            <Box sx={{
+              position: 'absolute',
+              top: '35%',
+              left: '20%',
+              width: '60%',
+              height: '30%',
+              border: '2px dashed #ffffff',
+              boxShadow: '0 0 0 9999px rgba(0, 0, 0, 0.5)',
+              zIndex: 5,
+              pointerEvents: 'none',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}>
+              <Typography variant="caption" sx={{ color: '#ffffff', bgcolor: 'rgba(0,0,0,0.6)', p: 0.5, borderRadius: 0.5 }}>
+                Align Expiration Date Here
               </Typography>
             </Box>
-          )}
 
-          {foundDate && (
-            <Card variant="outlined" sx={{ width: '100%', bgcolor: 'success.light', color: 'success.contrastText', p: 1 }}>
-              <CardContent sx={{ py: 1, '&:last-child': { pb: 1 } }}>
-                <Typography variant="subtitle2" sx={{ fontWeight: 'bold' }}>Date Detected!</Typography>
-                <Typography variant="h5" sx={{ fontWeight: 'bold', mt: 0.5 }}>
-                  {foundDate.toLocaleDateString()}
+            <canvas ref={canvasRef} style={{ display: 'none' }} />
+          </Box>
+
+          {/* Controls & Results */}
+          <Box sx={{ p: 3, display: 'flex', flexDirection: 'column', gap: 2, alignItems: 'center' }}>
+            {error && <Alert severity="warning" sx={{ width: '100%' }}>{error}</Alert>}
+
+            {loading && (
+              <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1 }}>
+                <CircularProgress size={32} />
+                <Typography variant="body2" color="text.secondary">Reading image text (OCR)...</Typography>
+              </Box>
+            )}
+
+            {ocrText && !foundDate && !loading && (
+              <Box sx={{ width: '100%', bgcolor: 'action.hover', p: 1.5, borderRadius: 1 }}>
+                <Typography variant="caption" color="text.secondary" display="block">Detected text:</Typography>
+                <Typography variant="body2" sx={{ fontFamily: 'monospace', wordBreak: 'break-all' }}>
+                  {ocrText}
                 </Typography>
-              </CardContent>
-              <CardActions sx={{ justifyContent: 'flex-end', pt: 0 }}>
-                <Button size="small" variant="contained" color="success" onClick={handleAcceptDate}>
-                  Confirm Date
-                </Button>
-              </CardActions>
-            </Card>
-          )}
+              </Box>
+            )}
 
-          <Button
-            variant="contained"
-            color="primary"
-            startIcon={<CameraIcon />}
-            disabled={loading || !stream}
-            onClick={handleCapture}
-            sx={{ width: '100%', py: 1.5 }}
-          >
-            Capture and Scan
-          </Button>
+            {foundDate && (
+              <Card variant="outlined" sx={{ width: '100%', bgcolor: 'success.light', color: 'success.contrastText', p: 1 }}>
+                <CardContent sx={{ py: 1, '&:last-child': { pb: 1 } }}>
+                  <Typography variant="subtitle2" sx={{ fontWeight: 'bold' }}>Date Detected!</Typography>
+                  <Typography variant="h5" sx={{ fontWeight: 'bold', mt: 0.5 }}>
+                    {foundDate.toLocaleDateString()}
+                  </Typography>
+                </CardContent>
+                <CardActions sx={{ justifyContent: 'flex-end', pt: 0 }}>
+                  <Button size="small" variant="contained" color="success" onClick={handleAcceptDate}>
+                    Confirm Date
+                  </Button>
+                </CardActions>
+              </Card>
+            )}
+
+            <Button
+              variant="contained"
+              color="primary"
+              startIcon={<CameraIcon />}
+              disabled={loading || !stream}
+              onClick={handleCapture}
+              sx={{ width: '100%', py: 1.5 }}
+            >
+              Capture and Scan
+            </Button>
+          </Box>
         </Box>
-      </Box>
+      </Fade>
     </Modal>
   );
 }
