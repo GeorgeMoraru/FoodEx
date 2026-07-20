@@ -92,9 +92,7 @@ export default function App() {
     return (
       <ThemeProvider theme={activeTheme}>
         <CssBaseline />
-        <Box sx={{ minHeight: '100vh', bgcolor: 'background.default', py: 4 }}>
-          <Login onLoginSuccess={handleLoginSuccess} />
-        </Box>
+        <Login onLoginSuccess={handleLoginSuccess} />
       </ThemeProvider>
     );
   }
@@ -108,7 +106,7 @@ export default function App() {
           setCurrentTab={setCurrentTab} 
           darkMode={darkMode} 
           setDarkMode={setDarkMode} 
-          repo={gitHubClient.repo}
+          username={gitHubClient.username}
           onLogout={handleLogout}
         />
         
@@ -122,9 +120,9 @@ export default function App() {
             <Box sx={{ p: 3, textAlign: 'center' }}>
               <Typography color="error" gutterBottom>{error}</Typography>
               <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                Please check repository name or PAT. You can try logging out and logging back in.
+                Could not load your food database. Try signing out and back in.
               </Typography>
-              <button onClick={handleLogout} style={{ padding: '8px 16px', borderRadius: '4px', cursor: 'pointer' }}>Log Out</button>
+              <button onClick={handleLogout} style={{ padding: '8px 16px', borderRadius: '4px', cursor: 'pointer' }}>Sign Out</button>
             </Box>
           ) : db ? (
             <>

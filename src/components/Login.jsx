@@ -1,153 +1,261 @@
-import React, { useState } from 'react';
-import { 
-  Box, Container, Paper, TextField, Button, Typography, 
-  Alert, CircularProgress, Dialog, DialogTitle, DialogContent,
-  DialogContentText, DialogActions
+import React, { useState, useEffect, useRef } from 'react';
+import {
+  Box, Container, Paper, Button, Typography,
+  Alert, CircularProgress, Chip, Link, Divider,
 } from '@mui/material';
+import GitHubIcon from '@mui/icons-material/GitHub';
+import LockOpenIcon from '@mui/icons-material/LockOpen';
+import OpenInNewIcon from '@mui/icons-material/OpenInNew';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import { requestDeviceCode, pollForToken } from '../utils/deviceFlow';
 import gitHubClient from '../utils/gitHubClient';
 
+// Auth steps
+const STEP = {
+  IDLE: 'idle',
+  REQUESTING: 'requesting',
+  WAITING: 'waiting',
+  SETTING_UP: 'setting_up',
+  DONE: 'done',
+};
+
 export default function Login({ onLoginSuccess }) {
-  const [pat, setPat] = useState(gitHubClient.pat || '');
-  const [repo, setRepo] = useState(gitHubClient.repo || '');
-  const [loading, setLoading] = useState(false);
+  const [step, setStep] = useState(STEP.IDLE);
   const [error, setError] = useState('');
-  
-  // Repo creation confirmation dialog
-  const [confirmCreateOpen, setConfirmCreateOpen] = useState(false);
+  const [deviceData, setDeviceData] = useState(null); // { user_code, verification_uri, expires_in }
+  const [pollCount, setPollCount] = useState(0);
+  const abortRef = useRef(false);
 
-  const handleVerify = async (e) => {
-    if (e) e.preventDefault();
+  // Clean up polling if component unmounts
+  useEffect(() => () => { abortRef.current = true; }, []);
+
+  const handleSignIn = async () => {
     setError('');
-    setLoading(true);
-
-    if (!pat.trim()) {
-      setError('GitHub PAT is required.');
-      setLoading(false);
-      return;
-    }
-    if (!repo.trim() || !repo.includes('/')) {
-      setError('GitHub repository name must be in the format "owner/repo-name".');
-      setLoading(false);
-      return;
-    }
+    setStep(STEP.REQUESTING);
+    abortRef.current = false;
 
     try {
-      gitHubClient.setCredentials(pat.trim(), repo.trim());
-      
-      const repoDetails = await gitHubClient.checkRepository();
-      if (!repoDetails) {
-        // Repo does not exist, open confirmation dialog to create it
-        setConfirmCreateOpen(true);
-        setLoading(false);
-        return;
-      }
+      // Step 1: get device code
+      const data = await requestDeviceCode();
+      setDeviceData(data);
+      setStep(STEP.WAITING);
 
-      // Repo exists, initialize db.json if missing
+      // Step 2: poll for token
+      const token = await pollForToken(
+        data.device_code,
+        data.interval || 5,
+        () => !abortRef.current && setPollCount(c => c + 1),
+      );
+
+      if (abortRef.current) return;
+
+      // Step 3: set token, discover username, set up repo
+      setStep(STEP.SETTING_UP);
+      await gitHubClient.setToken(token);
+
+      // Create repo if it doesn't exist, then init db.json
+      const repoExists = await gitHubClient.checkRepository();
+      if (!repoExists) await gitHubClient.createRepository();
       await gitHubClient.initializeDbIfMissing();
-      onLoginSuccess();
+
+      setStep(STEP.DONE);
+      setTimeout(onLoginSuccess, 600);
     } catch (err) {
-      console.error(err);
-      gitHubClient.clearCredentials();
-      setError(err.response?.data?.message || err.message || 'Verification failed. Please check your PAT and repository name.');
-      setLoading(false);
+      if (abortRef.current) return;
+      setError(err.message || 'Authentication failed. Please try again.');
+      setStep(STEP.IDLE);
     }
   };
 
-  const handleCreateRepo = async () => {
-    setConfirmCreateOpen(false);
-    setLoading(true);
+  const handleCancel = () => {
+    abortRef.current = true;
+    setStep(STEP.IDLE);
+    setDeviceData(null);
     setError('');
-
-    try {
-      await gitHubClient.createRepository();
-      await gitHubClient.initializeDbIfMissing();
-      onLoginSuccess();
-    } catch (err) {
-      console.error(err);
-      gitHubClient.clearCredentials();
-      setError(err.message || 'Failed to create or initialize the repository.');
-      setLoading(false);
-    }
   };
 
-  const handleCancelCreate = () => {
-    setConfirmCreateOpen(false);
-    gitHubClient.clearCredentials();
+  const copyCode = () => {
+    if (deviceData?.user_code) navigator.clipboard.writeText(deviceData.user_code);
   };
 
   return (
-    <Container maxWidth="xs" sx={{ mt: 8 }}>
-      <Paper sx={{ p: 4, display: 'flex', flexDirection: 'column', alignItems: 'center', borderRadius: 4 }}>
-        <Typography variant="h4" component="h1" gutterBottom sx={{ fontWeight: 'bold', color: 'primary.main', display: 'flex', alignItems: 'center', gap: 1 }}>
-          🍎 FoodEx
-        </Typography>
-        <Typography variant="subtitle1" color="text.secondary" gutterBottom align="center">
-          Serverless GitHub-Backed Food Expiration Tracker
-        </Typography>
-
-        {error && <Alert severity="error" sx={{ width: '100%', mb: 2, borderRadius: 2 }}>{error}</Alert>}
-
-        <Box component="form" onSubmit={handleVerify} sx={{ width: '100%', mt: 2 }}>
-          <TextField
-            margin="normal"
-            required
-            fullWidth
-            label="GitHub Personal Access Token (PAT)"
-            type="password"
-            value={pat}
-            onChange={(e) => setPat(e.target.value)}
-            helperText="Requires 'repo' scope to read/write db.json and commit photos."
-          />
-
-          <TextField
-            margin="normal"
-            required
-            fullWidth
-            label="GitHub Repository (owner/repo)"
-            placeholder="username/foodex-db"
-            value={repo}
-            onChange={(e) => setRepo(e.target.value)}
-            helperText="e.g. your-github-username/my-foodex-inventory"
-          />
-
-          <Button
-            type="submit"
-            fullWidth
-            variant="contained"
-            disabled={loading}
-            sx={{ mt: 3, mb: 2, py: 1.5, fontSize: '1rem', fontWeight: 'bold' }}
+    <Box
+      sx={{
+        minHeight: '100vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: theme =>
+          theme.palette.mode === 'dark'
+            ? 'linear-gradient(135deg, #0d1117 0%, #161b22 50%, #0d2818 100%)'
+            : 'linear-gradient(135deg, #f0fdf4 0%, #dcfce7 50%, #f0f9ff 100%)',
+        px: 2,
+      }}
+    >
+      <Container maxWidth="xs">
+        <Paper
+          elevation={0}
+          sx={{
+            p: 5,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            borderRadius: 4,
+            border: '1px solid',
+            borderColor: 'divider',
+            backdropFilter: 'blur(12px)',
+            background: theme =>
+              theme.palette.mode === 'dark'
+                ? 'rgba(22,27,34,0.85)'
+                : 'rgba(255,255,255,0.9)',
+          }}
+        >
+          {/* Logo */}
+          <Typography variant="h3" sx={{ mb: 0.5 }}>🍎</Typography>
+          <Typography
+            variant="h4"
+            component="h1"
+            sx={{ fontWeight: 800, color: 'primary.main', letterSpacing: '-0.5px' }}
           >
-            {loading ? (
-              <CircularProgress size={24} color="inherit" />
-            ) : (
-              'Connect Repository'
-            )}
-          </Button>
-        </Box>
-      </Paper>
+            FoodEx
+          </Typography>
+          <Typography variant="body2" color="text.secondary" align="center" sx={{ mb: 4 }}>
+            Food expiration tracker — backed by your GitHub account
+          </Typography>
 
-      {/* Repository Creation Confirmation Dialog */}
-      <Dialog
-        open={confirmCreateOpen}
-        onClose={handleCancelCreate}
-        aria-labelledby="confirm-dialog-title"
-        aria-describedby="confirm-dialog-description"
-      >
-        <DialogTitle id="confirm-dialog-title">
-          {"Repository Not Found"}
-        </DialogTitle>
-        <DialogContent>
-          <DialogContentText id="confirm-dialog-description">
-            The repository <strong>{repo}</strong> was not found. Would you like FoodEx to create this repository and initialize the <code>db.json</code> file for you automatically?
-          </DialogContentText>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={handleCancelCreate} color="inherit">Cancel</Button>
-          <Button onClick={handleCreateRepo} color="primary" variant="contained" autoFocus>
-            Create Repository
-          </Button>
-        </DialogActions>
-      </Dialog>
-    </Container>
+          {/* Error */}
+          {error && (
+            <Alert severity="error" sx={{ width: '100%', mb: 2, borderRadius: 2 }}>
+              {error}
+            </Alert>
+          )}
+
+          {/* ── IDLE: Sign in button ── */}
+          {step === STEP.IDLE && (
+            <Button
+              fullWidth
+              variant="contained"
+              size="large"
+              startIcon={<GitHubIcon />}
+              onClick={handleSignIn}
+              sx={{
+                py: 1.5,
+                fontSize: '1rem',
+                fontWeight: 700,
+                borderRadius: 2,
+                background: theme =>
+                  theme.palette.mode === 'dark' ? '#238636' : 'primary.main',
+                '&:hover': {
+                  background: theme =>
+                    theme.palette.mode === 'dark' ? '#2ea043' : undefined,
+                },
+              }}
+            >
+              Sign in with GitHub
+            </Button>
+          )}
+
+          {/* ── REQUESTING: spinner ── */}
+          {step === STEP.REQUESTING && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, py: 2 }}>
+              <CircularProgress size={36} />
+              <Typography variant="body2" color="text.secondary">
+                Connecting to GitHub…
+              </Typography>
+            </Box>
+          )}
+
+          {/* ── WAITING: show code ── */}
+          {step === STEP.WAITING && deviceData && (
+            <Box sx={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+              <LockOpenIcon color="primary" sx={{ fontSize: 40 }} />
+              <Typography variant="body1" align="center" fontWeight={600}>
+                Open GitHub to authorize
+              </Typography>
+              <Typography variant="body2" color="text.secondary" align="center">
+                Go to the link below and enter your one-time code:
+              </Typography>
+
+              {/* Code chip */}
+              <Chip
+                label={deviceData.user_code}
+                onClick={copyCode}
+                title="Click to copy"
+                sx={{
+                  fontSize: '1.4rem',
+                  fontWeight: 800,
+                  letterSpacing: '0.2em',
+                  px: 2,
+                  py: 3,
+                  borderRadius: 2,
+                  fontFamily: 'monospace',
+                  cursor: 'pointer',
+                  border: '2px solid',
+                  borderColor: 'primary.main',
+                  color: 'primary.main',
+                  bgcolor: 'primary.50',
+                  '&:hover': { opacity: 0.85 },
+                }}
+              />
+              <Typography variant="caption" color="text.secondary">
+                Click the code to copy it
+              </Typography>
+
+              <Divider sx={{ width: '100%' }} />
+
+              <Button
+                fullWidth
+                variant="outlined"
+                size="large"
+                endIcon={<OpenInNewIcon />}
+                component={Link}
+                href={deviceData.verification_uri}
+                target="_blank"
+                rel="noopener noreferrer"
+                sx={{ borderRadius: 2, fontWeight: 700 }}
+              >
+                {deviceData.verification_uri.replace('https://', '')}
+              </Button>
+
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 1 }}>
+                <CircularProgress size={16} />
+                <Typography variant="caption" color="text.secondary">
+                  Waiting for you to approve… ({pollCount} checks)
+                </Typography>
+              </Box>
+
+              <Button size="small" color="inherit" onClick={handleCancel} sx={{ opacity: 0.5 }}>
+                Cancel
+              </Button>
+            </Box>
+          )}
+
+          {/* ── SETTING UP ── */}
+          {step === STEP.SETTING_UP && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, py: 2 }}>
+              <CircularProgress size={36} />
+              <Typography variant="body2" color="text.secondary" align="center">
+                Setting up your <strong>foodex-data</strong> repository…
+              </Typography>
+            </Box>
+          )}
+
+          {/* ── DONE ── */}
+          {step === STEP.DONE && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, py: 2 }}>
+              <CheckCircleIcon color="success" sx={{ fontSize: 48 }} />
+              <Typography variant="body1" fontWeight={600} color="success.main">
+                Signed in!
+              </Typography>
+            </Box>
+          )}
+        </Paper>
+
+        <Typography variant="caption" color="text.secondary" align="center" display="block" sx={{ mt: 2, opacity: 0.6 }}>
+          Your data lives in a private repo on your GitHub account.
+          No servers. No subscriptions.
+        </Typography>
+      </Container>
+    </Box>
   );
 }
