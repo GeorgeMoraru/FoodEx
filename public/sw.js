@@ -1,9 +1,9 @@
 const CACHE_NAME = 'foodex-v2';
 const STATIC_ASSETS = [
-  '/',
-  '/index.html',
-  '/foodkeeper.json',
-  '/manifest.json'
+  './',
+  'index.html',
+  'foodkeeper.json',
+  'manifest.json'
 ];
 
 self.addEventListener('install', (event) => {
