@@ -5,7 +5,7 @@ import {
   Fade
 } from '@mui/material';
 import { Close as CloseIcon, CameraAlt as CameraIcon } from '@mui/icons-material';
-import Tesseract from 'tesseract.js';
+
 
 export default function ScannerModal({ open, onClose, onDateScanned }) {
   const videoRef = useRef(null);
@@ -13,14 +13,14 @@ export default function ScannerModal({ open, onClose, onDateScanned }) {
   
   const [stream, setStream] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [ocrText, setOcrText] = useState('');
+
   const [foundDate, setFoundDate] = useState(null);
   const [error, setError] = useState('');
 
   // Start Camera
   const startCamera = async () => {
     setError('');
-    setOcrText('');
+    setFoundDate(null);
     setFoundDate(null);
     try {
       const constraints = {
@@ -58,141 +58,19 @@ export default function ScannerModal({ open, onClose, onDateScanned }) {
     return () => stopCamera();
   }, [open]);
 
-  // Robust date parser with OCR digit correction and two-segment date support
-  const extractDate = (text) => {
-    const normalized = text.toLowerCase().replace(/\s+/g, ' ');
-    
-    // Character substitution helper to correct common OCR typos in date segments
-    const cleanGroup = (str) => {
-      return str
-        .replace(/[oO]/g, '0')
-        .replace(/[iIl|]/g, '1')
-        .replace(/[sS]/g, '5')
-        .replace(/[bB]/g, '8')
-        .replace(/[gG]/g, '9');
-    };
 
-    // Character set class representing digits (including common OCR typos)
-    const dClass = '[0-9iIl|sSbBgG]';
-
-    // Helper to calculate the last day of a month
-    const getLastDayOfMonth = (year, month) => {
-      return new Date(year, month, 0).getDate(); // 0th day of next month is last day of current
-    };
-
-    // Separator pattern allowing optional surrounding spaces (supporting: /, ., en-dash, and hyphen)
-    const sep = '\\s*[\\/\\.\\–-]\\s*';
-
-    // Pattern 1: DD/MM/YYYY or MM/DD/YYYY (with standard separators or spaces)
-    const pattern1 = new RegExp(`\\b(${dClass}{1,2})(${sep}|\\s+)(${dClass}{1,2})(${sep}|\\s+)(${dClass}{2,4})\\b`, 'g');
-    let match;
-    while ((match = pattern1.exec(normalized)) !== null) {
-      let d = parseInt(cleanGroup(match[1]));
-      let m = parseInt(cleanGroup(match[2]));
-      let y = parseInt(cleanGroup(match[3]));
-      
-      if (isNaN(d) || isNaN(m) || isNaN(y)) continue;
-      if (y < 100) y += 2000; // Assume 21st century
-
-      // Swap day/month if month is out of bounds
-      if (m > 12 && d <= 12) {
-        const temp = d;
-        d = m;
-        m = temp;
-      }
-
-      if (m >= 1 && m <= 12 && d >= 1 && d <= 31) {
-        return new Date(y, m - 1, d);
-      }
-    }
-
-    // Pattern 2: YYYY-MM-DD
-    const pattern2 = new RegExp(`\\b(${dClass}{4})(${sep}|\\s+)(${dClass}{1,2})(${sep}|\\s+)(${dClass}{1,2})\\b`, 'g');
-    while ((match = pattern2.exec(normalized)) !== null) {
-      const y = parseInt(cleanGroup(match[1]));
-      const m = parseInt(cleanGroup(match[2]));
-      const d = parseInt(cleanGroup(match[3]));
-      
-      if (isNaN(d) || isNaN(m) || isNaN(y)) continue;
-      if (m >= 1 && m <= 12 && d >= 1 && d <= 31) {
-        return new Date(y, m - 1, d);
-      }
-    }
-
-    // Pattern 3: MM/YYYY or MM.YYYY (common for shelf-stable items, e.g., 09.2026 or 12/2027)
-    const patternMMYYYY = new RegExp(`\\b(${dClass}{1,2})(${sep})(${dClass}{4})\\b`, 'g');
-    while ((match = patternMMYYYY.exec(normalized)) !== null) {
-      const m = parseInt(cleanGroup(match[1]));
-      let y = parseInt(cleanGroup(match[2]));
-
-      if (isNaN(m) || isNaN(y)) continue;
-      if (m >= 1 && m <= 12 && y >= 2000 && y <= 2100) {
-        const lastDay = getLastDayOfMonth(y, m);
-        return new Date(y, m - 1, lastDay);
-      }
-    }
-
-    // Pattern 4: YYYY/MM or YYYY.MM
-    const patternYYYYMM = new RegExp(`\\b(${dClass}{4})(${sep})(${dClass}{1,2})\\b`, 'g');
-    while ((match = patternYYYYMM.exec(normalized)) !== null) {
-      let y = parseInt(cleanGroup(match[1]));
-      const m = parseInt(cleanGroup(match[2]));
-
-      if (isNaN(m) || isNaN(y)) continue;
-      if (m >= 1 && m <= 12 && y >= 2000 && y <= 2100) {
-        const lastDay = getLastDayOfMonth(y, m);
-        return new Date(y, m - 1, lastDay);
-      }
-    }
-
-    // Pattern 5: Text Month, e.g. "15 Sep 2026" or "15 Dec 2026" or "15 Iul 2026"
-    const months = {
-      jan: 0, ian: 0,
-      feb: 1,
-      mar: 2,
-      apr: 3,
-      may: 4, mai: 4,
-      jun: 5, iun: 5,
-      jul: 6, iul: 6,
-      aug: 7,
-      sep: 8, sept: 8,
-      oct: 9,
-      nov: 10, noi: 10,
-      dec: 11
-    };
-    const monthNames = Object.keys(months).join('|');
-    
-    // Day Month Year
-    const pattern3 = new RegExp(`\\b(\\d{1,2})\\s+(${monthNames})[a-z]*\\s+(\\d{2,4})\\b`, 'i');
-    match = pattern3.exec(normalized);
-    if (match) {
-      const d = parseInt(match[1]);
-      const m = months[match[2].toLowerCase()];
-      let y = parseInt(match[3]);
-      if (y < 100) y += 2000;
-      return new Date(y, m, d);
-    }
-
-    // Month Day Year
-    const pattern4 = new RegExp(`\\b(${monthNames})[a-z]*\\s+(\\d{1,2})\\s*,?\\s*(\\d{2,4})\\b`, 'i');
-    match = pattern4.exec(normalized);
-    if (match) {
-      const m = months[match[1].toLowerCase()];
-      const d = parseInt(match[2]);
-      let y = parseInt(match[3]);
-      if (y < 100) y += 2000;
-      return new Date(y, m, d);
-    }
-
-    return null;
-  };
 
   const handleCapture = async () => {
     if (!videoRef.current || !canvasRef.current) return;
 
+    const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+    if (!apiKey) {
+      setError('VITE_GEMINI_API_KEY is not set in your .env file.');
+      return;
+    }
+
     setLoading(true);
     setError('');
-    setOcrText('');
     setFoundDate(null);
 
     const video = videoRef.current;
@@ -212,36 +90,53 @@ export default function ScannerModal({ open, onClose, onDateScanned }) {
     // Draw only the cropped center region of the video frame to the canvas
     ctx.drawImage(video, sx, sy, sWidth, sHeight, 0, 0, sWidth, sHeight);
 
-    // Apply basic grayscale processing on the cropped region to help OCR
-    const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    const data = imgData.data;
-    for (let i = 0; i < data.length; i += 4) {
-      const grayscale = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
-      data[i] = grayscale;
-      data[i+1] = grayscale;
-      data[i+2] = grayscale;
-    }
-    ctx.putImageData(imgData, 0, 0);
-
-    const dataUrl = canvas.toDataURL('image/jpeg');
+    // No need to grayscale for Gemini, but we keep it simple. We can just send the raw cropped image.
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+    const base64Data = dataUrl.split(',')[1]; // Remove 'data:image/jpeg;base64,' prefix
 
     try {
-      const result = await Tesseract.recognize(dataUrl, 'eng', {
-        logger: m => console.log(m)
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          contents: [{
+            parts: [
+              {
+                text: "Extract the expiration date from this image. Return ONLY the date in YYYY-MM-DD format. If no clear expiration date is found, return the exact word 'null'."
+              },
+              {
+                inlineData: {
+                  mimeType: "image/jpeg",
+                  data: base64Data
+                }
+              }
+            ]
+          }]
+        })
       });
-      
-      const recognizedText = result.data.text;
-      setOcrText(recognizedText);
 
-      const parsedDate = extractDate(recognizedText);
-      if (parsedDate) {
-        setFoundDate(parsedDate);
+      if (!response.ok) {
+        throw new Error(`API error: ${response.status}`);
+      }
+
+      const data = await response.json();
+      const textResponse = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+
+      if (textResponse && textResponse.toLowerCase() !== 'null') {
+        const parsedDate = new Date(textResponse);
+        if (!isNaN(parsedDate.getTime())) {
+          setFoundDate(parsedDate);
+        } else {
+          setError("Could not parse the date returned by the AI.");
+        }
       } else {
-        setError("Could not detect a valid expiration date. Please try again with clear, aligned text.");
+        setError("Could not detect a valid expiration date. Please try again.");
       }
     } catch (err) {
-      console.error('OCR processing error:', err);
-      setError('OCR engine failed to run. Please enter date manually.');
+      console.error('AI processing error:', err);
+      setError('AI request failed. Please check your network and API key.');
     } finally {
       setLoading(false);
     }
@@ -327,18 +222,11 @@ export default function ScannerModal({ open, onClose, onDateScanned }) {
             {loading && (
               <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1 }}>
                 <CircularProgress size={32} />
-                <Typography variant="body2" color="text.secondary">Reading image text (OCR)...</Typography>
+                <Typography variant="body2" color="text.secondary">Analyzing image with AI...</Typography>
               </Box>
             )}
 
-            {ocrText && !foundDate && !loading && (
-              <Box sx={{ width: '100%', bgcolor: 'action.hover', p: 1.5, borderRadius: 1 }}>
-                <Typography variant="caption" color="text.secondary" display="block">Detected text:</Typography>
-                <Typography variant="body2" sx={{ fontFamily: 'monospace', wordBreak: 'break-all' }}>
-                  {ocrText}
-                </Typography>
-              </Box>
-            )}
+
 
             {foundDate && (
               <Card variant="outlined" sx={{ width: '100%', bgcolor: 'success.light', color: 'success.contrastText', p: 1 }}>
