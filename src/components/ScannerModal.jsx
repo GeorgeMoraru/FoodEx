@@ -171,13 +171,15 @@ export default function ScannerModal({ open, onClose, onDateScanned }) {
   };
 
   return (
-    <Modal open={open} onClose={onClose} aria-labelledby="scanner-modal-title">
-      <Fade in={open}>
+    <Modal open={open} onClose={onClose} closeAfterTransition aria-labelledby="scanner-modal-title">
+      <Fade in={open} timeout={{ enter: 250, exit: 200 }}>
         <Box sx={{
           position: 'absolute',
           top: '50%',
           left: '50%',
-          transform: 'translate(-50%, -50%)',
+          transform: 'translate(-50%, -50%) translateZ(0)',
+          willChange: 'opacity, transform',
+          backfaceVisibility: 'hidden',
           width: { xs: '95%', sm: 500 },
           bgcolor: 'background.paper',
           borderRadius: '4px',

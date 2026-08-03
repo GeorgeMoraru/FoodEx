@@ -160,8 +160,8 @@ export default function App() {
           ) : db ? (
             <>
               {currentTab === 'dashboard' && (
-                <Fade in={currentTab === 'dashboard'} timeout={400}>
-                  <Box>
+                <Fade in={currentTab === 'dashboard'} timeout={300}>
+                  <Box sx={{ willChange: 'opacity, transform', transform: 'translateZ(0)' }}>
                     <Dashboard 
                       products={db.products || []} 
                       settings={db.settings || {}}
@@ -173,8 +173,8 @@ export default function App() {
                 </Fade>
               )}
               {currentTab === 'stats' && (
-                <Fade in={currentTab === 'stats'} timeout={400}>
-                  <Box>
+                <Fade in={currentTab === 'stats'} timeout={300}>
+                  <Box sx={{ willChange: 'opacity, transform', transform: 'translateZ(0)' }}>
                     <Stats 
                       products={db.products || []} 
                       settings={db.settings || {}}
@@ -184,8 +184,8 @@ export default function App() {
                 </Fade>
               )}
               {currentTab === 'settings' && (
-                <Fade in={currentTab === 'settings'} timeout={400}>
-                  <Box>
+                <Fade in={currentTab === 'settings'} timeout={300}>
+                  <Box sx={{ willChange: 'opacity, transform', transform: 'translateZ(0)' }}>
                     <Settings 
                       settings={db.settings || {}}
                       pushSubscriptions={db.pushSubscriptions || []}
