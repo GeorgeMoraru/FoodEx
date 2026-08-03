@@ -12,17 +12,32 @@ export default function Login({ onLoginSuccess }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const handleLogin = async (provider) => {
+  const handleLogin = async (provider, forceRedirect = false) => {
     setError('');
     setLoading(true);
     try {
+      if (forceRedirect) {
+        await signInWithRedirect(auth, provider);
+        return;
+      }
       await signInWithPopup(auth, provider);
-      // Wait a moment for Firebase auth state to settle, then initialize DB
       await dbClient.initializeDbIfMissing();
       onLoginSuccess();
     } catch (err) {
-      console.error('Firebase Auth error:', err);
-      setError(`[${err.code || 'auth/error'}]: ${err.message || 'Authentication failed.'}`);
+      console.error('Firebase Auth popup error:', err);
+      // Fallback to redirect if popup is blocked, encounters COOP issues, or internal error
+      if (err.code === 'auth/internal-error' || err.code === 'auth/popup-blocked' || err.code === 'auth/popup-closed-by-user' || err.code === 'auth/cancelled-popup-request') {
+        try {
+          console.warn('[FoodEx Auth] Popup failed, falling back to signInWithRedirect...');
+          await signInWithRedirect(auth, provider);
+          return;
+        } catch (redirectErr) {
+          console.error('Firebase Auth redirect fallback error:', redirectErr);
+          setError(`[${redirectErr.code || 'auth/error'}]: ${redirectErr.message || 'Authentication failed.'}`);
+        }
+      } else {
+        setError(`[${err.code || 'auth/error'}]: ${err.message || 'Authentication failed.'}`);
+      }
       setLoading(false);
     }
   };
