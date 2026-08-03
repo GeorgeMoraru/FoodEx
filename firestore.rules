@@ -2,28 +2,39 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     
-    // Users can read any user profile if authenticated (names, emails, household IDs)
-    // but can only write to their own profile.
+    // Users can read any user profile if authenticated
+    // but can only write to their own profile with validated schema.
     match /users/{userId} {
       allow read: if request.auth != null;
-      allow write: if request.auth != null && request.auth.uid == userId;
+      allow write: if request.auth != null && request.auth.uid == userId
+        && request.resource.data.keys().hasOnly(['householdId', 'email', 'displayName'])
+        && request.resource.data.householdId is string
+        && request.resource.data.householdId.size() > 0
+        && request.resource.data.householdId.size() <= 128;
     }
     
-    // Households can be read/written if:
-    // 1. It is the user's own default household (ID matches their UID) - prevents race conditions.
-    // 2. The user's profile document has householdId matching the household.
+    // Households can be read/written by members with schema validation.
     match /households/{householdId} {
-      allow read, write: if request.auth != null && (
+      allow read: if request.auth != null && (
         householdId == request.auth.uid ||
         get(/databases/(default)/documents/users/$(request.auth.uid)).data.householdId == householdId
       );
+      allow write: if request.auth != null && (
+        householdId == request.auth.uid ||
+        get(/databases/(default)/documents/users/$(request.auth.uid)).data.householdId == householdId
+      )
+        && request.resource.data.keys().hasOnly(['products', 'pushSubscriptions', 'settings'])
+        && request.resource.data.products is list
+        && request.resource.data.products.size() <= 5000;
     }
     
-    // Home Assistant tokens are unguessable UUIDs. 
-    // Anyone with the exact UUID can read the summary data.
+    // Home Assistant tokens: allow individual doc reads (UUID is the secret),
+    // but BLOCK collection listing to prevent enumeration.
     match /ha_tokens/{tokenId} {
-      allow read: if true;
-      allow write: if request.auth != null;
+      allow get: if true;
+      allow list: if false;
+      allow create, update: if request.auth != null;
+      allow delete: if request.auth != null;
     }
   }
 }

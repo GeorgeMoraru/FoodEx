@@ -11,6 +11,7 @@ import {
   MeetingRoom as LeaveIcon
 } from '@mui/icons-material';
 import dbClient from '../utils/dbClient';
+import { getVapidPublicKey } from '../utils/vapid';
 
 function urlBase64ToUint8Array(base64String) {
   const padding = '='.repeat((4 - base64String.length % 4) % 4);
@@ -122,6 +123,12 @@ export default function Settings({ settings, pushSubscriptions, onRefresh }) {
     const name = newLocationName.trim();
     if (!name) return;
 
+    // Validate location name: alphanumeric, spaces, and common characters only
+    if (!/^[\w\s\-'.()]+$/u.test(name) || name.length > 50) {
+      setError('Location name must be 1-50 characters and contain only letters, numbers, spaces, hyphens, and apostrophes.');
+      return;
+    }
+
     if (currentLocations.some(l => l.toLowerCase() === name.toLowerCase())) {
       setError('Location already exists.');
       return;
@@ -230,9 +237,9 @@ export default function Settings({ settings, pushSubscriptions, onRefresh }) {
       const registration = await navigator.serviceWorker.register('./sw.js');
       await navigator.serviceWorker.ready;
 
-      const publicKey = settings.vapidPublicKey;
+      const publicKey = getVapidPublicKey();
       if (!publicKey) {
-        throw new Error('VAPID Public Key not found in settings database.');
+        throw new Error('VAPID Public Key not configured. Set VITE_VAPID_PUBLIC_KEY in your .env file.');
       }
 
       const subscription = await registration.pushManager.subscribe({

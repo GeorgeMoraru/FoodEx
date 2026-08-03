@@ -63,12 +63,6 @@ export default function ScannerModal({ open, onClose, onDateScanned }) {
   const handleCapture = async () => {
     if (!videoRef.current || !canvasRef.current) return;
 
-    const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-    if (!apiKey) {
-      setError('VITE_GEMINI_API_KEY is not set in your .env file.');
-      return;
-    }
-
     setLoading(true);
     setError('');
     setFoundDate(null);
@@ -90,39 +84,66 @@ export default function ScannerModal({ open, onClose, onDateScanned }) {
     // Draw only the cropped center region of the video frame to the canvas
     ctx.drawImage(video, sx, sy, sWidth, sHeight, 0, 0, sWidth, sHeight);
 
-    // No need to grayscale for Gemini, but we keep it simple. We can just send the raw cropped image.
     const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
     const base64Data = dataUrl.split(',')[1]; // Remove 'data:image/jpeg;base64,' prefix
 
     try {
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          contents: [{
-            parts: [
-              {
-                text: "Extract the expiration date from this image. Return ONLY the date in YYYY-MM-DD format. If no clear expiration date is found, return the exact word 'null'."
-              },
-              {
-                inlineData: {
-                  mimeType: "image/jpeg",
-                  data: base64Data
+      let textResponse;
+
+      const proxyUrl = import.meta.env.VITE_GEMINI_PROXY_URL;
+
+      if (proxyUrl) {
+        // Production: Call server-side proxy (Firebase Cloud Function)
+        const response = await fetch(proxyUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ data: { imageBase64: base64Data } })
+        });
+
+        if (!response.ok) {
+          throw new Error(`Proxy error: ${response.status}`);
+        }
+
+        const result = await response.json();
+        textResponse = result.result?.date || result.date;
+      } else {
+        // Development fallback: Direct API call (API key exposed - dev only)
+        const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+        if (!apiKey) {
+          setError('No Gemini proxy URL or API key configured. Set VITE_GEMINI_PROXY_URL for production or VITE_GEMINI_API_KEY for local development.');
+          setLoading(false);
+          return;
+        }
+
+        console.warn('[FoodEx Security] Direct Gemini API call from client. This exposes the API key. Configure VITE_GEMINI_PROXY_URL for production.');
+
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{
+              parts: [
+                {
+                  text: "Extract the expiration date from this image. Return ONLY the date in YYYY-MM-DD format. If no clear expiration date is found, return the exact word 'null'."
+                },
+                {
+                  inlineData: {
+                    mimeType: 'image/jpeg',
+                    data: base64Data
+                  }
                 }
-              }
-            ]
-          }]
-        })
-      });
+              ]
+            }]
+          })
+        });
 
-      if (!response.ok) {
-        throw new Error(`API error: ${response.status}`);
+        if (!response.ok) {
+          throw new Error(`API error: ${response.status}`);
+        }
+
+        const data = await response.json();
+        textResponse = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
       }
-
-      const data = await response.json();
-      const textResponse = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
 
       if (textResponse && textResponse.toLowerCase() !== 'null') {
         const parsedDate = new Date(textResponse);
@@ -136,7 +157,7 @@ export default function ScannerModal({ open, onClose, onDateScanned }) {
       }
     } catch (err) {
       console.error('AI processing error:', err);
-      setError('AI request failed. Please check your network and API key.');
+      setError('AI request failed. Please check your network and configuration.');
     } finally {
       setLoading(false);
     }
