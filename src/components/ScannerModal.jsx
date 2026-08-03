@@ -436,22 +436,16 @@ export default function ScannerModal({ open, onClose, onDateScanned, settings })
             {stream && (
               <Box sx={{
                 position: 'absolute',
-                top: '20%',
+                top: '15%',
                 left: '10%',
                 width: '80%',
-                height: '60%',
-                border: '2px dashed #ffffff',
-                boxShadow: '0 0 0 9999px rgba(0, 0, 0, 0.4)',
+                height: '70%',
+                border: '2px dashed rgba(255, 255, 255, 0.7)',
+                boxShadow: '0 0 0 9999px rgba(0, 0, 0, 0.35)',
                 zIndex: 5,
                 pointerEvents: 'none',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center'
-              }}>
-                <Typography variant="caption" sx={{ color: '#ffffff', bgcolor: 'rgba(0,0,0,0.6)', p: 0.5, borderRadius: 0.5 }}>
-                  Position Expiration Date Inside Frame
-                </Typography>
-              </Box>
+                borderRadius: '4px'
+              }} />
             )}
 
             {!stream && (
