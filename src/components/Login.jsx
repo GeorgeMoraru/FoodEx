@@ -1,9 +1,14 @@
 import React, { useState } from 'react';
 import { 
   Box, Container, Paper, Button, Typography, 
-  Alert, CircularProgress, Divider
+  Alert, CircularProgress, Grid, Chip, Stack
 } from '@mui/material';
 import GoogleIcon from '@mui/icons-material/Google';
+import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
+import CameraEnhanceIcon from '@mui/icons-material/CameraEnhance';
+import SyncIcon from '@mui/icons-material/Sync';
+import NotificationsActiveIcon from '@mui/icons-material/NotificationsActive';
+import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import { signInWithPopup, signInWithRedirect } from 'firebase/auth';
 import { auth, googleProvider } from '../utils/firebase';
 import dbClient from '../utils/dbClient';
@@ -25,7 +30,6 @@ export default function Login({ onLoginSuccess }) {
       onLoginSuccess();
     } catch (err) {
       console.error('Firebase Auth popup error:', err);
-      // Fallback to redirect if popup is blocked, encounters COOP issues, or internal error
       if (err.code === 'auth/internal-error' || err.code === 'auth/popup-blocked' || err.code === 'auth/popup-closed-by-user' || err.code === 'auth/cancelled-popup-request') {
         try {
           console.warn('[FoodEx Auth] Popup failed, falling back to signInWithRedirect...');
@@ -51,41 +55,52 @@ export default function Login({ onLoginSuccess }) {
         justifyContent: 'center',
         background: theme =>
           theme.palette.mode === 'dark'
-            ? 'linear-gradient(135deg, #0d1117 0%, #161b22 50%, #0d1828 100%)'
-            : 'linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 50%, #bae6fd 100%)',
+            ? 'radial-gradient(circle at 50% 30%, #1a233a 0%, #0d1117 70%)'
+            : 'radial-gradient(circle at 50% 30%, #e0f2fe 0%, #bae6fd 70%)',
         px: 2,
+        py: 4
       }}
     >
-      <Container maxWidth="xs">
+      <Container maxWidth="sm">
         <Paper
           elevation={0}
           sx={{
-            p: 5,
+            p: { xs: 3, sm: 5 },
             display: 'flex',
             flexDirection: 'column',
             alignItems: 'center',
             borderRadius: 4,
             border: '1px solid',
             borderColor: 'divider',
-            backdropFilter: 'blur(12px)',
+            backdropFilter: 'blur(16px)',
             background: theme =>
               theme.palette.mode === 'dark'
-                ? 'rgba(22,27,34,0.85)'
-                : 'rgba(255,255,255,0.9)',
+                ? 'rgba(22,27,34,0.9)'
+                : 'rgba(255,255,255,0.92)',
+            boxShadow: '0 20px 40px rgba(0,0,0,0.12)'
           }}
         >
-          {/* Logo */}
-          <Typography variant="h3" sx={{ mb: 0.5 }}>🍎</Typography>
-          <Typography
-            variant="h4"
-            component="h1"
-            sx={{ fontWeight: 800, color: 'primary.main', letterSpacing: '-0.5px' }}
-          >
-            FoodEx
-          </Typography>
-          <Typography variant="body2" color="text.secondary" align="center" sx={{ mb: 4 }}>
-            Seamless Food Expiration Tracker
-          </Typography>
+          {/* Hero Branding */}
+          <Box sx={{ textCenter: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', mb: 3 }}>
+            <Typography variant="h2" sx={{ mb: 1, filter: 'drop-shadow(0 4px 8px rgba(0,0,0,0.15))' }}>🍎</Typography>
+            <Typography
+              variant="h3"
+              component="h1"
+              sx={{ fontWeight: 800, color: 'primary.main', letterSpacing: '-0.5px', textTransform: 'uppercase' }}
+            >
+              FoodEx
+            </Typography>
+            <Typography variant="subtitle1" color="text.secondary" align="center" sx={{ fontWeight: 500, mt: 0.5 }}>
+              Smart Food Expiration Tracking & Household Management
+            </Typography>
+          </Box>
+
+          {/* Feature Highlights */}
+          <Stack direction="row" spacing={1} flexWrap="wrap" justifyContent="center" gap={1} sx={{ mb: 4 }}>
+            <Chip icon={<CameraEnhanceIcon fontSize="small" />} label="AI Expiration Scanner" color="primary" variant="outlined" size="small" />
+            <Chip icon={<SyncIcon fontSize="small" />} label="Cloud Household Sync" color="success" variant="outlined" size="small" />
+            <Chip icon={<NotificationsActiveIcon fontSize="small" />} label="Smart Push Alerts" color="warning" variant="outlined" size="small" />
+          </Stack>
 
           {error && (
             <Alert severity="error" sx={{ width: '100%', mb: 3, borderRadius: 2 }}>
@@ -93,29 +108,62 @@ export default function Login({ onLoginSuccess }) {
             </Alert>
           )}
 
-          <Button
-            fullWidth
-            variant="contained"
-            size="large"
-            disabled={loading}
-            onClick={() => handleLogin(googleProvider)}
-            startIcon={<GoogleIcon />}
-            sx={{ py: 1.5, borderRadius: 2, fontWeight: 700 }}
-          >
-            Sign in with Google
-          </Button>
+          {/* Login Action Area */}
+          <Box sx={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <Button
+              fullWidth
+              variant="contained"
+              size="large"
+              disabled={loading}
+              onClick={() => handleLogin(googleProvider, false)}
+              startIcon={<GoogleIcon />}
+              sx={{ 
+                py: 1.6, 
+                borderRadius: 2.5, 
+                fontWeight: 700, 
+                fontSize: '1.05rem',
+                textTransform: 'none',
+                boxShadow: '0 4px 14px rgba(46, 125, 50, 0.35)'
+              }}
+            >
+              Sign in with Google
+            </Button>
+
+            <Button
+              fullWidth
+              variant="outlined"
+              size="medium"
+              disabled={loading}
+              onClick={() => handleLogin(googleProvider, true)}
+              startIcon={<OpenInNewIcon />}
+              sx={{ 
+                py: 1.2, 
+                borderRadius: 2.5, 
+                fontWeight: 600, 
+                textTransform: 'none',
+                color: 'text.secondary'
+              }}
+            >
+              Use Redirect Login (If Popups Blocked)
+            </Button>
+          </Box>
           
           {loading && (
-            <Box sx={{ mt: 3, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-              <CircularProgress size={24} />
-              <Typography variant="caption" sx={{ mt: 1 }} color="text.secondary">Authenticating...</Typography>
+            <Box sx={{ mt: 3, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1 }}>
+              <CircularProgress size={28} />
+              <Typography variant="body2" color="text.secondary">Authenticating with Google...</Typography>
             </Box>
           )}
-        </Paper>
 
-        <Typography variant="caption" color="text.secondary" align="center" display="block" sx={{ mt: 3, opacity: 0.6 }}>
-          Your data syncs securely across all your devices via Firebase.
-        </Typography>
+          <Box sx={{ mt: 4, pt: 3, borderTop: '1px solid', borderColor: 'divider', width: '100%', textAlign: 'center' }}>
+            <Stack direction="row" alignItems="center" justifyContent="center" spacing={0.5} sx={{ opacity: 0.7 }}>
+              <LockOutlinedIcon fontSize="small" color="disabled" />
+              <Typography variant="caption" color="text.secondary">
+                Protected by Firebase Authentication & Encrypted Firestore Rules
+              </Typography>
+            </Stack>
+          </Box>
+        </Paper>
       </Container>
     </Box>
   );

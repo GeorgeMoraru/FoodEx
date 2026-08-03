@@ -13,6 +13,7 @@ import dbClient from './utils/dbClient';
 
 export default function App() {
   const [user, setUser] = useState(null);
+  const [authChecking, setAuthChecking] = useState(true);
   const [db, setDb] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -44,6 +45,7 @@ export default function App() {
 
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser);
+      setAuthChecking(false);
       if (currentUser) {
         try {
           await dbClient.initializeDbIfMissing();
@@ -106,6 +108,18 @@ export default function App() {
   };
 
   const activeTheme = getTheme(darkMode ? 'dark' : 'light');
+
+  if (authChecking) {
+    return (
+      <ThemeProvider theme={activeTheme}>
+        <CssBaseline />
+        <Box sx={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', bgcolor: 'background.default', gap: 2 }}>
+          <CircularProgress size={40} />
+          <Typography variant="body2" color="text.secondary">Verifying authentication status...</Typography>
+        </Box>
+      </ThemeProvider>
+    );
+  }
 
   if (!user) {
     return (
