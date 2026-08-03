@@ -1,8 +1,8 @@
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
-import { defineString } from 'firebase-functions/params';
+import { defineSecret } from 'firebase-functions/params';
 
-// API key is read from Firebase Functions config, never exposed to client
-const geminiApiKey = defineString('GEMINI_API_KEY');
+// API key is read from Firebase Secret Manager, never exposed to client
+const geminiApiKey = defineSecret('GEMINI_API_KEY');
 
 /**
  * Firebase Callable Function that proxies image-based date extraction
@@ -15,6 +15,7 @@ export const extractExpirationDate = onCall(
   {
     maxInstances: 10,
     cors: true,
+    secrets: [geminiApiKey],
     enforceAppCheck: false, // Enable App Check in production for extra security
   },
   async (request) => {
