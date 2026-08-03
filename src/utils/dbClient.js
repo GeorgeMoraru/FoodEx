@@ -1,6 +1,5 @@
 import { auth, db as firestore, firebaseConfig } from './firebase';
 import { doc, getDoc, setDoc, runTransaction, collection, query, where, getDocs } from 'firebase/firestore';
-import { generateVapidKeys } from './vapid';
 
 class DbClient {
   constructor() {
@@ -95,12 +94,6 @@ class DbClient {
 
       if (!db.settings) { db.settings = {}; updated = true; }
       if (!db.settings.locations) { db.settings.locations = ['Fridge', 'Freezer']; updated = true; }
-      if (!db.settings.vapidPublicKey || !db.settings.vapidPrivateKey) {
-        const keys = await generateVapidKeys();
-        db.settings.vapidPublicKey = keys.publicKey;
-        db.settings.vapidPrivateKey = keys.privateKey;
-        updated = true;
-      }
       if (!db.products) { db.products = []; updated = true; }
       if (!db.pushSubscriptions) { db.pushSubscriptions = []; updated = true; }
 
@@ -112,7 +105,6 @@ class DbClient {
     }
 
     // Fresh database
-    const keys = await generateVapidKeys();
     const initialDb = {
       products: [],
       pushSubscriptions: [],
@@ -121,8 +113,6 @@ class DbClient {
         emailAlertsEnabled: false,
         emailAddress: '',
         locations: ['Fridge', 'Freezer'],
-        vapidPublicKey: keys.publicKey,
-        vapidPrivateKey: keys.privateKey,
       },
     };
     const houseDocRef = doc(firestore, 'households', this.cachedHouseholdId);

@@ -180,7 +180,7 @@ export default function ProductFormModal({ open, onClose, product, settings, onS
           }
         } else {
           db.products.push({
-            id: `prod-${Date.now()}`,
+            id: crypto.randomUUID(),
             name: name.trim(),
             quantity: parseFloat(quantity),
             unit,
