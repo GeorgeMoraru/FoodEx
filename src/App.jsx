@@ -8,6 +8,7 @@ import Stats from './components/Stats';
 import Settings from './components/Settings';
 import ProductFormModal from './components/ProductFormModal';
 import { onAuthStateChanged, getRedirectResult } from 'firebase/auth';
+import { auth } from './utils/firebase';
 import dbClient from './utils/dbClient';
 
 export default function App() {
