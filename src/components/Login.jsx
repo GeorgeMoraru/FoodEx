@@ -4,7 +4,7 @@ import {
   Alert, CircularProgress, Divider
 } from '@mui/material';
 import GoogleIcon from '@mui/icons-material/Google';
-import { signInWithPopup } from 'firebase/auth';
+import { signInWithPopup, signInWithRedirect } from 'firebase/auth';
 import { auth, googleProvider } from '../utils/firebase';
 import dbClient from '../utils/dbClient';
 
@@ -21,8 +21,19 @@ export default function Login({ onLoginSuccess }) {
       await dbClient.initializeDbIfMissing();
       onLoginSuccess();
     } catch (err) {
-      console.error(err);
-      setError(err.message || 'Authentication failed.');
+      console.error('Firebase Auth popup error:', err);
+      // Fall back to redirect authentication if popup is blocked or fails internally
+      if (err.code === 'auth/popup-blocked' || err.code === 'auth/internal-error' || err.code === 'auth/popup-closed-by-user') {
+        try {
+          await signInWithRedirect(auth, provider);
+          return;
+        } catch (redirectErr) {
+          console.error('Firebase Auth redirect error:', redirectErr);
+          setError(`[${redirectErr.code || 'auth/error'}]: ${redirectErr.message || 'Authentication failed.'}`);
+        }
+      } else {
+        setError(`[${err.code || 'auth/error'}]: ${err.message || 'Authentication failed.'}`);
+      }
       setLoading(false);
     }
   };
