@@ -4,7 +4,10 @@ import {
   Alert, IconButton, Card, CardActions, CardContent,
   Fade
 } from '@mui/material';
-import { Close as CloseIcon, CameraAlt as CameraIcon } from '@mui/icons-material';
+import { 
+  Close as CloseIcon, CameraAlt as CameraIcon,
+  FileUpload as UploadIcon 
+} from '@mui/icons-material';
 import Tesseract from 'tesseract.js';
 
 export function parseDateFromText(text) {
@@ -102,20 +105,46 @@ export default function ScannerModal({ open, onClose, onDateScanned }) {
   const [foundDate, setFoundDate] = useState(null);
   const [error, setError] = useState('');
 
-  // Start Camera
+  // Start Camera with robust fallback chain
   const startCamera = async () => {
     setError('');
     setOcrText('');
     setFoundDate(null);
-    try {
-      const constraints = {
-        video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
-      };
-      const mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
+
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      setError('Camera API is not accessible in this context. Use the "Upload Photo of Date" option below to scan an image.');
+      return;
+    }
+
+    const constraintList = [
+      { video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } } },
+      { video: { facingMode: { ideal: 'user' } } },
+      { video: true }
+    ];
+
+    let mediaStream = null;
+    let lastError = null;
+
+    for (const constraints of constraintList) {
+      try {
+        mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
+        if (mediaStream) break;
+      } catch (err) {
+        lastError = err;
+      }
+    }
+
+    if (mediaStream) {
       setStream(mediaStream);
-    } catch (err) {
-      console.error('Error starting camera:', err);
-      setError('Could not access your camera. Please ensure permissions are granted.');
+    } else {
+      console.error('Camera fallback chain error:', lastError);
+      if (lastError && (lastError.name === 'NotAllowedError' || lastError.name === 'PermissionDeniedError')) {
+        setError('Camera access permission was denied by your browser. Allow camera access in your browser site settings or upload a photo of the date below.');
+      } else if (lastError && (lastError.name === 'NotFoundError' || lastError.name === 'DevicesNotFoundError')) {
+        setError('No camera detected on this device. You can upload an image photo of the expiration date below.');
+      } else {
+        setError('Could not start live camera preview. You can choose a photo of the product date below.');
+      }
     }
   };
 
@@ -244,6 +273,52 @@ export default function ScannerModal({ open, onClose, onDateScanned }) {
     setLoading(false);
   };
 
+  const handleFileUpload = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setLoading(true);
+    setError('');
+    setOcrText('');
+    setFoundDate(null);
+
+    try {
+      const image = new Image();
+      image.src = URL.createObjectURL(file);
+      await new Promise((resolve, reject) => {
+        image.onload = resolve;
+        image.onerror = reject;
+      });
+
+      const canvas = canvasRef.current || document.createElement('canvas');
+      canvas.width = image.naturalWidth || image.width;
+      canvas.height = image.naturalHeight || image.height;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(image, 0, 0);
+
+      console.log('[FoodEx Scanner] Running local OCR on uploaded image file...');
+      const ocrResult = await Tesseract.recognize(canvas, 'eng');
+      const rawText = ocrResult.data?.text || '';
+      setOcrText(rawText);
+
+      if (rawText) {
+        const parsedDate = parseDateFromText(rawText);
+        if (parsedDate && !isNaN(parsedDate.getTime())) {
+          setFoundDate(parsedDate);
+        } else {
+          setError('Could not extract a valid expiration date from the uploaded image. Please try a clearer picture.');
+        }
+      } else {
+        setError('No text detected in the uploaded image file.');
+      }
+    } catch (fileErr) {
+      console.error('File upload OCR error:', fileErr);
+      setError('Failed to process the uploaded image file.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleAcceptDate = () => {
     if (foundDate) {
       onDateScanned(foundDate);
@@ -297,24 +372,34 @@ export default function ScannerModal({ open, onClose, onDateScanned }) {
             />
 
             {/* Alignment Finder Grid Overlay */}
-            <Box sx={{
-              position: 'absolute',
-              top: '30%',
-              left: '15%',
-              width: '70%',
-              height: '40%',
-              border: '2px dashed #ffffff',
-              boxShadow: '0 0 0 9999px rgba(0, 0, 0, 0.5)',
-              zIndex: 5,
-              pointerEvents: 'none',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center'
-            }}>
-              <Typography variant="caption" sx={{ color: '#ffffff', bgcolor: 'rgba(0,0,0,0.6)', p: 0.5, borderRadius: 0.5 }}>
-                Align Expiration Date Here
-              </Typography>
-            </Box>
+            {stream && (
+              <Box sx={{
+                position: 'absolute',
+                top: '30%',
+                left: '15%',
+                width: '70%',
+                height: '40%',
+                border: '2px dashed #ffffff',
+                boxShadow: '0 0 0 9999px rgba(0, 0, 0, 0.5)',
+                zIndex: 5,
+                pointerEvents: 'none',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}>
+                <Typography variant="caption" sx={{ color: '#ffffff', bgcolor: 'rgba(0,0,0,0.6)', p: 0.5, borderRadius: 0.5 }}>
+                  Align Expiration Date Here
+                </Typography>
+              </Box>
+            )}
+
+            {!stream && (
+              <Box sx={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', p: 3, textAlign: 'center', color: '#aaaaaa' }}>
+                <CameraIcon sx={{ fontSize: 48, mb: 1, opacity: 0.5 }} />
+                <Typography variant="body2">Camera preview inactive or blocked.</Typography>
+                <Typography variant="caption" color="text.secondary">Use the upload button below to select a photo of the date.</Typography>
+              </Box>
+            )}
 
             <canvas ref={canvasRef} style={{ display: 'none' }} />
           </Box>
@@ -355,16 +440,34 @@ export default function ScannerModal({ open, onClose, onDateScanned }) {
               </Card>
             )}
 
-            <Button
-              variant="contained"
-              color="primary"
-              startIcon={<CameraIcon />}
-              disabled={loading || !stream}
-              onClick={handleCapture}
-              sx={{ width: '100%', py: 1.5 }}
-            >
-              Capture and Scan Date
-            </Button>
+            <Box sx={{ display: 'flex', gap: 1.5, width: '100%', flexWrap: 'wrap' }}>
+              <Button
+                variant="contained"
+                color="primary"
+                startIcon={<CameraIcon />}
+                disabled={loading || !stream}
+                onClick={handleCapture}
+                sx={{ flex: 1, py: 1.5 }}
+              >
+                Capture & Scan
+              </Button>
+
+              <Button
+                variant="outlined"
+                component="label"
+                startIcon={<UploadIcon />}
+                disabled={loading}
+                sx={{ flex: 1, py: 1.5 }}
+              >
+                Upload Photo
+                <input
+                  type="file"
+                  hidden
+                  accept="image/*"
+                  onChange={handleFileUpload}
+                />
+              </Button>
+            </Box>
           </Box>
         </Box>
       </Fade>
