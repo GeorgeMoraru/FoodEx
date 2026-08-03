@@ -212,13 +212,15 @@ export default function ProductFormModal({ open, onClose, product, settings, onS
 
   return (
     <>
-      <Modal open={open} onClose={onClose} aria-labelledby="product-form-title">
-        <Fade in={open}>
+      <Modal open={open} onClose={onClose} closeAfterTransition aria-labelledby="product-form-title">
+        <Fade in={open} timeout={{ enter: 250, exit: 200 }}>
           <Box sx={{
             position: 'absolute',
             top: '50%',
             left: '50%',
-            transform: 'translate(-50%, -50%)',
+            transform: 'translate(-50%, -50%) translateZ(0)',
+            willChange: 'opacity, transform',
+            backfaceVisibility: 'hidden',
             width: { xs: '95%', sm: 600 },
             maxHeight: '90vh',
             bgcolor: 'background.paper',

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { 
   Box, Container, Paper, Button, Typography, 
-  Alert, CircularProgress, Grid, Chip, Stack
+  Alert, CircularProgress, Grid, Chip, Stack, Fade
 } from '@mui/material';
 import GoogleIcon from '@mui/icons-material/Google';
 import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
@@ -62,38 +62,41 @@ export default function Login({ onLoginSuccess }) {
       }}
     >
       <Container maxWidth="sm">
-        <Paper
-          elevation={0}
-          sx={{
-            p: { xs: 3, sm: 5 },
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            borderRadius: 4,
-            border: '1px solid',
-            borderColor: 'divider',
-            backdropFilter: 'blur(16px)',
-            background: theme =>
-              theme.palette.mode === 'dark'
-                ? 'rgba(22,27,34,0.9)'
-                : 'rgba(255,255,255,0.92)',
-            boxShadow: '0 20px 40px rgba(0,0,0,0.12)'
-          }}
-        >
-          {/* Hero Branding */}
-          <Box sx={{ textCenter: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', mb: 3 }}>
-            <Typography variant="h2" sx={{ mb: 1, filter: 'drop-shadow(0 4px 8px rgba(0,0,0,0.15))' }}>🍎</Typography>
-            <Typography
-              variant="h3"
-              component="h1"
-              sx={{ fontWeight: 800, color: 'primary.main', letterSpacing: '-0.5px', textTransform: 'uppercase' }}
-            >
-              FoodEx
-            </Typography>
-            <Typography variant="subtitle1" color="text.secondary" align="center" sx={{ fontWeight: 500, mt: 0.5 }}>
-              Smart Food Expiration Tracking & Household Management
-            </Typography>
-          </Box>
+        <Fade in timeout={400}>
+          <Paper
+            elevation={0}
+            sx={{
+              p: { xs: 3, sm: 5 },
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              borderRadius: '4px',
+              border: '1px solid',
+              borderColor: 'divider',
+              backdropFilter: 'blur(16px)',
+              background: theme =>
+                theme.palette.mode === 'dark'
+                  ? 'rgba(22,27,34,0.9)'
+                  : 'rgba(255,255,255,0.92)',
+              boxShadow: '0 20px 40px rgba(0,0,0,0.12)',
+              willChange: 'opacity, transform',
+              transform: 'translateZ(0)'
+            }}
+          >
+            {/* Hero Branding */}
+            <Box sx={{ textCenter: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', mb: 3 }}>
+              <img src="logo.png" alt="FoodEx Logo" style={{ width: 64, height: 64, borderRadius: '50%', marginBottom: 12, filter: 'drop-shadow(0 4px 12px rgba(0,0,0,0.15))' }} />
+              <Typography
+                variant="h3"
+                component="h1"
+                sx={{ fontWeight: 800, color: 'primary.main', letterSpacing: '-0.5px', textTransform: 'uppercase' }}
+              >
+                FoodEx
+              </Typography>
+              <Typography variant="subtitle1" color="text.secondary" align="center" sx={{ fontWeight: 500, mt: 0.5 }}>
+                Smart Food Expiration Tracking & Household Management
+              </Typography>
+            </Box>
 
           {/* Feature Highlights */}
           <Stack direction="row" spacing={1} flexWrap="wrap" justifyContent="center" gap={1} sx={{ mb: 4 }}>
@@ -164,7 +167,8 @@ export default function Login({ onLoginSuccess }) {
             </Stack>
           </Box>
         </Paper>
-      </Container>
-    </Box>
-  );
+      </Fade>
+    </Container>
+  </Box>
+);
 }
