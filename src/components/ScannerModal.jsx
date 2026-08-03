@@ -95,13 +95,43 @@ export function parseDateFromText(text) {
   return null;
 }
 
-export default function ScannerModal({ open, onClose, onDateScanned }) {
+// Preprocess canvas image to enhance text definition for Tesseract OCR
+function preprocessCanvasForOcr(sourceCanvas) {
+  const ocrCanvas = document.createElement('canvas');
+  ocrCanvas.width = sourceCanvas.width;
+  ocrCanvas.height = sourceCanvas.height;
+  const ctx = ocrCanvas.getContext('2d');
+  ctx.drawImage(sourceCanvas, 0, 0);
+
+  const imgData = ctx.getImageData(0, 0, ocrCanvas.width, ocrCanvas.height);
+  const d = imgData.data;
+
+  let totalGray = 0;
+  for (let i = 0; i < d.length; i += 4) {
+    const gray = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+    totalGray += gray;
+  }
+  const avg = totalGray / (d.length / 4);
+
+  // Apply thresholding for sharp text definition
+  for (let i = 0; i < d.length; i += 4) {
+    const gray = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+    const val = gray > avg * 0.92 ? 255 : 0;
+    d[i] = d[i + 1] = d[i + 2] = val;
+  }
+
+  ctx.putImageData(imgData, 0, 0);
+  return ocrCanvas;
+}
+
+export default function ScannerModal({ open, onClose, onDateScanned, settings }) {
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   
   const [stream, setStream] = useState(null);
   const [loading, setLoading] = useState(false);
   const [ocrText, setOcrText] = useState('');
+  const [scanEngine, setScanEngine] = useState('');
   const [foundDate, setFoundDate] = useState(null);
   const [error, setError] = useState('');
 
@@ -109,6 +139,7 @@ export default function ScannerModal({ open, onClose, onDateScanned }) {
   const startCamera = async () => {
     setError('');
     setOcrText('');
+    setScanEngine('');
     setFoundDate(null);
 
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
@@ -170,37 +201,24 @@ export default function ScannerModal({ open, onClose, onDateScanned }) {
     return () => stopCamera();
   }, [open]);
 
-  const handleCapture = async () => {
-    if (!videoRef.current || !canvasRef.current) return;
-
+  const processImageForDate = async (sourceCanvas) => {
     setLoading(true);
     setError('');
     setOcrText('');
+    setScanEngine('');
     setFoundDate(null);
 
-    const video = videoRef.current;
-    const canvas = canvasRef.current;
-    const ctx = canvas.getContext('2d');
-
-    // Crop dimensions (center 70% width, 40% height)
-    const sWidth = video.videoWidth * 0.7;
-    const sHeight = video.videoHeight * 0.4;
-    const sx = (video.videoWidth - sWidth) / 2;
-    const sy = (video.videoHeight - sHeight) / 2;
-
-    canvas.width = sWidth;
-    canvas.height = sHeight;
-
-    ctx.drawImage(video, sx, sy, sWidth, sHeight, 0, 0, sWidth, sHeight);
-
-    const base64Data = canvas.toDataURL('image/jpeg', 0.85).split(',')[1];
+    const base64Data = sourceCanvas.toDataURL('image/jpeg', 0.85).split(',')[1];
 
     let rawText = '';
     let aiSuccess = false;
+    let engineUsed = '';
 
-    // 1. Try Gemini API / Proxy if configured
+    // Check for Gemini API key / Proxy in hierarchy
+    const userApiKey = settings?.geminiApiKey || localStorage.getItem('gemini_api_key');
     const proxyUrl = import.meta.env.VITE_GEMINI_PROXY_URL;
-    const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+    const envApiKey = import.meta.env.VITE_GEMINI_API_KEY;
+    const apiKey = userApiKey || envApiKey;
 
     if (proxyUrl || apiKey) {
       try {
@@ -213,7 +231,12 @@ export default function ScannerModal({ open, onClose, onDateScanned }) {
           if (response.ok) {
             const result = await response.json();
             rawText = result.result?.date || result.date || '';
-            aiSuccess = true;
+            if (rawText && rawText.toLowerCase() !== 'null') {
+              aiSuccess = true;
+              engineUsed = 'Gemini AI Proxy';
+            }
+          } else {
+            console.warn(`Gemini Proxy returned HTTP ${response.status}`);
           }
         } else if (apiKey) {
           const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`, {
@@ -231,26 +254,35 @@ export default function ScannerModal({ open, onClose, onDateScanned }) {
           if (response.ok) {
             const data = await response.json();
             rawText = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
-            aiSuccess = true;
+            if (rawText && rawText.toLowerCase() !== 'null') {
+              aiSuccess = true;
+              engineUsed = 'Gemini 2.0 AI';
+            }
+          } else {
+            const errBody = await response.text().catch(() => '');
+            console.warn(`Gemini API returned HTTP ${response.status}: ${errBody}`);
           }
         }
       } catch (geminiErr) {
-        console.warn('Gemini API call failed, falling back to local OCR:', geminiErr);
+        console.warn('Gemini API call failed, falling back to local high-contrast OCR:', geminiErr);
       }
     }
 
-    // 2. Fallback to Local Client-side Tesseract.js OCR if AI was not configured or failed
+    // 2. Fallback to Local Tesseract.js OCR (using preprocessed high-contrast canvas)
     if (!aiSuccess || !rawText || rawText.toLowerCase() === 'null') {
       try {
-        console.log('[FoodEx Scanner] Running local Tesseract.js OCR...');
-        const ocrResult = await Tesseract.recognize(canvas, 'eng');
+        console.log('[FoodEx Scanner] Running local high-contrast Tesseract.js OCR...');
+        const ocrCanvas = preprocessCanvasForOcr(sourceCanvas);
+        const ocrResult = await Tesseract.recognize(ocrCanvas, 'eng');
         rawText = ocrResult.data?.text || '';
+        engineUsed = 'Local High-Contrast OCR';
       } catch (ocrErr) {
         console.error('Tesseract OCR error:', ocrErr);
       }
     }
 
     setOcrText(rawText);
+    setScanEngine(engineUsed);
 
     // 3. Parse date
     if (rawText) {
@@ -264,23 +296,33 @@ export default function ScannerModal({ open, onClose, onDateScanned }) {
       if (parsedDate && !isNaN(parsedDate.getTime())) {
         setFoundDate(parsedDate);
       } else {
-        setError('No valid expiration date could be extracted from the scanned frame. Please align the date clearly inside the box and try again.');
+        setError('No valid expiration date could be extracted from the image text. Ensure the date text is clear and unblurred.');
       }
     } else {
-      setError('No readable text found in the frame. Please align the expiration date inside the box.');
+      setError('No readable text detected. Align the package date text clearly or upload a high-resolution photo.');
     }
 
     setLoading(false);
   };
 
+  const handleCapture = async () => {
+    if (!videoRef.current || !canvasRef.current) return;
+
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext('2d');
+
+    // Use full video resolution for maximum clarity
+    canvas.width = video.videoWidth || 1280;
+    canvas.height = video.videoHeight || 720;
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+    await processImageForDate(canvas);
+  };
+
   const handleFileUpload = async (event) => {
     const file = event.target.files?.[0];
     if (!file) return;
-
-    setLoading(true);
-    setError('');
-    setOcrText('');
-    setFoundDate(null);
 
     try {
       const image = new Image();
@@ -296,26 +338,10 @@ export default function ScannerModal({ open, onClose, onDateScanned }) {
       const ctx = canvas.getContext('2d');
       ctx.drawImage(image, 0, 0);
 
-      console.log('[FoodEx Scanner] Running local OCR on uploaded image file...');
-      const ocrResult = await Tesseract.recognize(canvas, 'eng');
-      const rawText = ocrResult.data?.text || '';
-      setOcrText(rawText);
-
-      if (rawText) {
-        const parsedDate = parseDateFromText(rawText);
-        if (parsedDate && !isNaN(parsedDate.getTime())) {
-          setFoundDate(parsedDate);
-        } else {
-          setError('Could not extract a valid expiration date from the uploaded image. Please try a clearer picture.');
-        }
-      } else {
-        setError('No text detected in the uploaded image file.');
-      }
+      await processImageForDate(canvas);
     } catch (fileErr) {
-      console.error('File upload OCR error:', fileErr);
-      setError('Failed to process the uploaded image file.');
-    } finally {
-      setLoading(false);
+      console.error('File upload error:', fileErr);
+      setError('Failed to load uploaded image file.');
     }
   };
 
@@ -375,12 +401,12 @@ export default function ScannerModal({ open, onClose, onDateScanned }) {
             {stream && (
               <Box sx={{
                 position: 'absolute',
-                top: '30%',
-                left: '15%',
-                width: '70%',
-                height: '40%',
+                top: '20%',
+                left: '10%',
+                width: '80%',
+                height: '60%',
                 border: '2px dashed #ffffff',
-                boxShadow: '0 0 0 9999px rgba(0, 0, 0, 0.5)',
+                boxShadow: '0 0 0 9999px rgba(0, 0, 0, 0.4)',
                 zIndex: 5,
                 pointerEvents: 'none',
                 display: 'flex',
@@ -388,7 +414,7 @@ export default function ScannerModal({ open, onClose, onDateScanned }) {
                 justifyContent: 'center'
               }}>
                 <Typography variant="caption" sx={{ color: '#ffffff', bgcolor: 'rgba(0,0,0,0.6)', p: 0.5, borderRadius: 0.5 }}>
-                  Align Expiration Date Here
+                  Position Expiration Date Inside Frame
                 </Typography>
               </Box>
             )}
@@ -396,8 +422,8 @@ export default function ScannerModal({ open, onClose, onDateScanned }) {
             {!stream && (
               <Box sx={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', p: 3, textAlign: 'center', color: '#aaaaaa' }}>
                 <CameraIcon sx={{ fontSize: 48, mb: 1, opacity: 0.5 }} />
-                <Typography variant="body2">Camera preview inactive or blocked.</Typography>
-                <Typography variant="caption" color="text.secondary">Use the upload button below to select a photo of the date.</Typography>
+                <Typography variant="body2">Camera preview inactive or unavailable.</Typography>
+                <Typography variant="caption" color="text.secondary">Use the Upload Photo button below to select an image of the date.</Typography>
               </Box>
             )}
 
@@ -417,7 +443,10 @@ export default function ScannerModal({ open, onClose, onDateScanned }) {
 
             {ocrText && !foundDate && !loading && (
               <Box sx={{ width: '100%', bgcolor: 'action.hover', p: 1.5, borderRadius: '4px' }}>
-                <Typography variant="caption" color="text.secondary" display="block" sx={{ fontWeight: 'bold' }}>Scanned Text:</Typography>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                  <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 'bold' }}>Scanned Text:</Typography>
+                  <Typography variant="caption" color="primary.main" sx={{ fontWeight: 'bold' }}>{scanEngine}</Typography>
+                </Box>
                 <Typography variant="body2" sx={{ fontFamily: 'monospace', wordBreak: 'break-all' }}>
                   {ocrText}
                 </Typography>
@@ -427,7 +456,10 @@ export default function ScannerModal({ open, onClose, onDateScanned }) {
             {foundDate && (
               <Card variant="outlined" sx={{ width: '100%', bgcolor: 'success.light', color: 'success.contrastText', p: 1 }}>
                 <CardContent sx={{ py: 1, '&:last-child': { pb: 1 } }}>
-                  <Typography variant="subtitle2" sx={{ fontWeight: 'bold' }}>Date Detected!</Typography>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <Typography variant="subtitle2" sx={{ fontWeight: 'bold' }}>Date Detected!</Typography>
+                    <Typography variant="caption" sx={{ opacity: 0.9 }}>via {scanEngine}</Typography>
+                  </Box>
                   <Typography variant="h5" sx={{ fontWeight: 'bold', mt: 0.5 }}>
                     {foundDate.toLocaleDateString(undefined, { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' })}
                   </Typography>

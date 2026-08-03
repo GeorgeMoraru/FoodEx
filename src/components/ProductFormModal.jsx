@@ -407,6 +407,7 @@ export default function ProductFormModal({ open, onClose, product, settings, onS
         open={scannerOpen} 
         onClose={() => setScannerOpen(false)} 
         onDateScanned={handleDateScanned} 
+        settings={settings}
       />
     </>
   );

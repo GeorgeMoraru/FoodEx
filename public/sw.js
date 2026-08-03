@@ -1,4 +1,4 @@
-const CACHE_NAME = 'foodex-v14';
+const CACHE_NAME = 'foodex-v15';
 const STATIC_ASSETS = [
   './',
   'index.html',
