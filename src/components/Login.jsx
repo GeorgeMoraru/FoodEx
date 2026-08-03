@@ -4,7 +4,7 @@ import {
   Alert, CircularProgress, Divider
 } from '@mui/material';
 import GoogleIcon from '@mui/icons-material/Google';
-import { signInWithPopup, browserPopupRedirectResolver } from 'firebase/auth';
+import { signInWithPopup } from 'firebase/auth';
 import { auth, googleProvider } from '../utils/firebase';
 import dbClient from '../utils/dbClient';
 
@@ -16,7 +16,7 @@ export default function Login({ onLoginSuccess }) {
     setError('');
     setLoading(true);
     try {
-      await signInWithPopup(auth, provider, browserPopupRedirectResolver);
+      await signInWithPopup(auth, provider);
       // Wait a moment for Firebase auth state to settle, then initialize DB
       await dbClient.initializeDbIfMissing();
       onLoginSuccess();
