@@ -95,7 +95,7 @@ export function parseDateFromText(text) {
   return null;
 }
 
-// Preprocess canvas image to enhance text definition for Tesseract OCR
+// Preprocess canvas image to enhance ink-jet text definition for Tesseract OCR
 function preprocessCanvasForOcr(sourceCanvas) {
   const ocrCanvas = document.createElement('canvas');
   ocrCanvas.width = sourceCanvas.width;
@@ -106,18 +106,20 @@ function preprocessCanvasForOcr(sourceCanvas) {
   const imgData = ctx.getImageData(0, 0, ocrCanvas.width, ocrCanvas.height);
   const d = imgData.data;
 
-  let totalGray = 0;
+  let min = 255, max = 0;
   for (let i = 0; i < d.length; i += 4) {
-    const gray = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
-    totalGray += gray;
+    const g = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+    if (g < min) min = g;
+    if (g > max) max = g;
   }
-  const avg = totalGray / (d.length / 4);
 
-  // Apply thresholding for sharp text definition
+  const range = (max - min) || 1;
+
   for (let i = 0; i < d.length; i += 4) {
-    const gray = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
-    const val = gray > avg * 0.92 ? 255 : 0;
-    d[i] = d[i + 1] = d[i + 2] = val;
+    const g = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+    const normalized = ((g - min) / range) * 255;
+    const binarized = normalized > 120 ? 255 : 0;
+    d[i] = d[i + 1] = d[i + 2] = binarized;
   }
 
   ctx.putImageData(imgData, 0, 0);
@@ -143,7 +145,7 @@ export default function ScannerModal({ open, onClose, onDateScanned, settings })
     setFoundDate(null);
 
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      setError('Camera API is not accessible in this context. Use the "Upload Photo of Date" option below to scan an image.');
+      setError('Camera API is not accessible in this context. Use the "Upload Photo" option below to scan an image.');
       return;
     }
 
@@ -213,6 +215,7 @@ export default function ScannerModal({ open, onClose, onDateScanned, settings })
     let rawText = '';
     let aiSuccess = false;
     let engineUsed = '';
+    let apiErrorMsg = '';
 
     // Check for Gemini API key / Proxy in hierarchy
     const userApiKey = settings?.geminiApiKey || localStorage.getItem('gemini_api_key');
@@ -231,51 +234,74 @@ export default function ScannerModal({ open, onClose, onDateScanned, settings })
           if (response.ok) {
             const result = await response.json();
             rawText = result.result?.date || result.date || '';
-            if (rawText && rawText.toLowerCase() !== 'null') {
+            if (rawText && rawText.toLowerCase() !== 'null' && rawText.toLowerCase() !== 'none') {
               aiSuccess = true;
               engineUsed = 'Gemini AI Proxy';
             }
           } else {
-            console.warn(`Gemini Proxy returned HTTP ${response.status}`);
+            const errTxt = await response.text().catch(() => '');
+            apiErrorMsg = `Gemini Proxy error (${response.status}): ${errTxt || 'Proxy call failed'}`;
           }
         } else if (apiKey) {
-          const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              contents: [{
-                parts: [
-                  { text: "Extract the expiration date from this image. Return ONLY the date in YYYY-MM-DD format. If no clear expiration date is found, return 'null'." },
-                  { inlineData: { mimeType: 'image/jpeg', data: base64Data } }
-                ]
-              }]
-            })
-          });
-          if (response.ok) {
-            const data = await response.json();
-            rawText = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
-            if (rawText && rawText.toLowerCase() !== 'null') {
-              aiSuccess = true;
-              engineUsed = 'Gemini 2.0 AI';
+          const modelsToTry = ['gemini-1.5-flash', 'gemini-2.0-flash', 'gemini-1.5-pro'];
+          
+          for (const modelName of modelsToTry) {
+            try {
+              const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  contents: [{
+                    parts: [
+                      { 
+                        text: "You are an expert OCR vision system for food expiration tracking. Look at this food item packaging image. Locate any expiration date, best before date, use by date, EXP, BB, or date stamp (e.g. 2026-08-15, 15/08/2026, 15.08.26, 08/26, 15 AUG 2026). Return ONLY the date string. If no date numbers are present at all in the image, reply 'NONE'." 
+                      },
+                      { 
+                        inlineData: { mimeType: 'image/jpeg', data: base64Data } 
+                      }
+                    ]
+                  }]
+                })
+              });
+
+              if (response.ok) {
+                const data = await response.json();
+                const textOutput = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
+                if (textOutput && textOutput.toUpperCase() !== 'NONE' && textOutput.toLowerCase() !== 'null') {
+                  rawText = textOutput;
+                  aiSuccess = true;
+                  engineUsed = `${modelName} AI`;
+                  apiErrorMsg = '';
+                  break;
+                }
+              } else {
+                const errBody = await response.text().catch(() => '');
+                let jsonErr = '';
+                try { jsonErr = JSON.parse(errBody)?.error?.message; } catch (e) {}
+                apiErrorMsg = `Gemini API (${modelName}) HTTP ${response.status}: ${jsonErr || errBody || 'Request failed'}`;
+              }
+            } catch (fetchErr) {
+              apiErrorMsg = `Network error calling ${modelName}: ${fetchErr.message}`;
             }
-          } else {
-            const errBody = await response.text().catch(() => '');
-            console.warn(`Gemini API returned HTTP ${response.status}: ${errBody}`);
           }
         }
       } catch (geminiErr) {
-        console.warn('Gemini API call failed, falling back to local high-contrast OCR:', geminiErr);
+        apiErrorMsg = `Gemini request error: ${geminiErr.message}`;
       }
     }
 
-    // 2. Fallback to Local Tesseract.js OCR (using preprocessed high-contrast canvas)
-    if (!aiSuccess || !rawText || rawText.toLowerCase() === 'null') {
+    // 2. Dual-Pass Local Tesseract.js OCR (if AI did not produce a date)
+    if (!aiSuccess || !rawText) {
       try {
-        console.log('[FoodEx Scanner] Running local high-contrast Tesseract.js OCR...');
-        const ocrCanvas = preprocessCanvasForOcr(sourceCanvas);
-        const ocrResult = await Tesseract.recognize(ocrCanvas, 'eng');
-        rawText = ocrResult.data?.text || '';
-        engineUsed = 'Local High-Contrast OCR';
+        console.log('[FoodEx Scanner] Running dual-pass local Tesseract.js OCR...');
+        const [resOriginal, resPreprocessed] = await Promise.all([
+          Tesseract.recognize(sourceCanvas, 'eng').catch(() => null),
+          Tesseract.recognize(preprocessCanvasForOcr(sourceCanvas), 'eng').catch(() => null)
+        ]);
+        const text1 = resOriginal?.data?.text || '';
+        const text2 = resPreprocessed?.data?.text || '';
+        rawText = `${text1}\n${text2}`.trim();
+        engineUsed = 'Local Dual-Pass OCR';
       } catch (ocrErr) {
         console.error('Tesseract OCR error:', ocrErr);
       }
@@ -296,10 +322,18 @@ export default function ScannerModal({ open, onClose, onDateScanned, settings })
       if (parsedDate && !isNaN(parsedDate.getTime())) {
         setFoundDate(parsedDate);
       } else {
-        setError('No valid expiration date could be extracted from the image text. Ensure the date text is clear and unblurred.');
+        if (apiErrorMsg) {
+          setError(`${apiErrorMsg} — Falling back to local OCR could not find a clear date. Align package text clearly.`);
+        } else {
+          setError('No valid date could be parsed from the image. Please align the expiration date clearly or upload a higher resolution photo.');
+        }
       }
     } else {
-      setError('No readable text detected. Align the package date text clearly or upload a high-resolution photo.');
+      if (apiErrorMsg) {
+        setError(`${apiErrorMsg}`);
+      } else {
+        setError('No readable text detected in the image. Align the package date text clearly.');
+      }
     }
 
     setLoading(false);
@@ -312,7 +346,6 @@ export default function ScannerModal({ open, onClose, onDateScanned, settings })
     const canvas = canvasRef.current;
     const ctx = canvas.getContext('2d');
 
-    // Use full video resolution for maximum clarity
     canvas.width = video.videoWidth || 1280;
     canvas.height = video.videoHeight || 720;
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
@@ -351,6 +384,8 @@ export default function ScannerModal({ open, onClose, onDateScanned, settings })
       onClose();
     }
   };
+
+  const userApiKey = settings?.geminiApiKey || localStorage.getItem('gemini_api_key');
 
   return (
     <Modal open={open} onClose={onClose} closeAfterTransition aria-labelledby="scanner-modal-title">
@@ -500,6 +535,12 @@ export default function ScannerModal({ open, onClose, onDateScanned, settings })
                 />
               </Button>
             </Box>
+
+            {!userApiKey && (
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5, textAlign: 'center' }}>
+                💡 Tip: Add a free Gemini API key in <strong>Settings</strong> for high-accuracy AI Vision date recognition.
+              </Typography>
+            )}
           </Box>
         </Box>
       </Fade>
