@@ -7,8 +7,7 @@ import Dashboard from './components/Dashboard';
 import Stats from './components/Stats';
 import Settings from './components/Settings';
 import ProductFormModal from './components/ProductFormModal';
-import { auth } from './utils/firebase';
-import { onAuthStateChanged } from 'firebase/auth';
+import { onAuthStateChanged, getRedirectResult } from 'firebase/auth';
 import dbClient from './utils/dbClient';
 
 export default function App() {
@@ -30,12 +29,28 @@ export default function App() {
   const [productModalOpen, setProductModalOpen] = useState(false);
   const [editProduct, setEditProduct] = useState(null);
 
-  // Check auth status on load
+  // Check auth status on load and handle redirect authentication
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+    getRedirectResult(auth)
+      .then(async (result) => {
+        if (result?.user) {
+          await dbClient.initializeDbIfMissing().catch(() => {});
+        }
+      })
+      .catch((err) => {
+        console.error('Auth redirect result error:', err);
+      });
+
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser);
       if (currentUser) {
-        fetchDatabase();
+        try {
+          await dbClient.initializeDbIfMissing();
+          fetchDatabase();
+        } catch (dbErr) {
+          console.error('Database initialization error:', dbErr);
+          setError(dbErr.message || 'Failed to initialize database.');
+        }
       } else {
         setDb(null);
       }
