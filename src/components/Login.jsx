@@ -21,19 +21,8 @@ export default function Login({ onLoginSuccess }) {
       await dbClient.initializeDbIfMissing();
       onLoginSuccess();
     } catch (err) {
-      console.error('Firebase Auth popup error:', err);
-      // Fall back to redirect authentication if popup is blocked or fails internally
-      if (err.code === 'auth/popup-blocked' || err.code === 'auth/internal-error' || err.code === 'auth/popup-closed-by-user') {
-        try {
-          await signInWithRedirect(auth, provider);
-          return;
-        } catch (redirectErr) {
-          console.error('Firebase Auth redirect error:', redirectErr);
-          setError(`[${redirectErr.code || 'auth/error'}]: ${redirectErr.message || 'Authentication failed.'}`);
-        }
-      } else {
-        setError(`[${err.code || 'auth/error'}]: ${err.message || 'Authentication failed.'}`);
-      }
+      console.error('Firebase Auth error:', err);
+      setError(`[${err.code || 'auth/error'}]: ${err.message || 'Authentication failed.'}`);
       setLoading(false);
     }
   };
