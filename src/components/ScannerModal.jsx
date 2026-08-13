@@ -5,8 +5,7 @@ import {
   Fade
 } from '@mui/material';
 import { 
-  Close as CloseIcon, CameraAlt as CameraIcon,
-  FileUpload as UploadIcon 
+  Close as CloseIcon, CameraAlt as CameraIcon
 } from '@mui/icons-material';
 import Tesseract from 'tesseract.js';
 import { auth } from '../utils/firebase';
@@ -366,31 +365,6 @@ export default function ScannerModal({ open, onClose, onDateScanned, settings })
     await processImageForDate(canvas);
   };
 
-  const handleFileUpload = async (event) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    try {
-      const image = new Image();
-      image.src = URL.createObjectURL(file);
-      await new Promise((resolve, reject) => {
-        image.onload = resolve;
-        image.onerror = reject;
-      });
-
-      const canvas = canvasRef.current || document.createElement('canvas');
-      canvas.width = image.naturalWidth || image.width;
-      canvas.height = image.naturalHeight || image.height;
-      const ctx = canvas.getContext('2d');
-      ctx.drawImage(image, 0, 0);
-
-      await processImageForDate(canvas);
-    } catch (fileErr) {
-      console.error('File upload error:', fileErr);
-      setError('Failed to load uploaded image file.');
-    }
-  };
-
   const handleAcceptDate = () => {
     if (foundDate) {
       onDateScanned(foundDate);
@@ -520,32 +494,17 @@ export default function ScannerModal({ open, onClose, onDateScanned, settings })
               </Card>
             )}
 
-            <Box sx={{ display: 'flex', gap: 1.5, width: '100%', flexWrap: 'wrap' }}>
+            <Box sx={{ width: '100%' }}>
               <Button
+                fullWidth
                 variant="contained"
                 color="primary"
                 startIcon={<CameraIcon />}
                 disabled={loading || !stream}
                 onClick={handleCapture}
-                sx={{ flex: 1, py: 1.5 }}
+                sx={{ py: 1.5, fontWeight: 'bold' }}
               >
                 Capture & Scan
-              </Button>
-
-              <Button
-                variant="outlined"
-                component="label"
-                startIcon={<UploadIcon />}
-                disabled={loading}
-                sx={{ flex: 1, py: 1.5 }}
-              >
-                Upload Photo
-                <input
-                  type="file"
-                  hidden
-                  accept="image/*"
-                  onChange={handleFileUpload}
-                />
               </Button>
             </Box>
           </Box>
