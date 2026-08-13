@@ -32,7 +32,6 @@ export default function Settings({ settings, pushSubscriptions, onRefresh }) {
   const [notificationDaysBefore, setNotificationDaysBefore] = useState(settings.notificationDaysBefore || 3);
   const [emailAlertsEnabled, setEmailAlertsEnabled] = useState(settings.emailAlertsEnabled || false);
   const [emailAddress, setEmailAddress] = useState(settings.emailAddress || '');
-  const [geminiApiKey, setGeminiApiKey] = useState(settings.geminiApiKey || localStorage.getItem('gemini_api_key') || '');
   const [haEnabled, setHaEnabled] = useState(!!settings.haToken);
 
   const [isSubscribed, setIsSubscribed] = useState(false);
@@ -104,16 +103,10 @@ export default function Settings({ settings, pushSubscriptions, onRefresh }) {
           notificationDaysBefore: parseInt(notificationDaysBefore),
           emailAlertsEnabled,
           emailAddress: emailAddress.trim(),
-          geminiApiKey: geminiApiKey.trim(),
           haToken: haEnabled ? (db.settings.haToken || getUuid()) : null
         };
         return db;
       });
-      if (geminiApiKey.trim()) {
-        localStorage.setItem('gemini_api_key', geminiApiKey.trim());
-      } else {
-        localStorage.removeItem('gemini_api_key');
-      }
       setSuccess('Settings updated successfully!');
       onRefresh();
     } catch (err) {
@@ -383,17 +376,6 @@ export default function Settings({ settings, pushSubscriptions, onRefresh }) {
                 onChange={(e) => setEmailAddress(e.target.value)}
                 disabled={!emailAlertsEnabled}
                 helperText="Emails will be sent daily via GitHub Actions SMTP mailer."
-                sx={{ mb: 3 }}
-              />
-
-              <TextField
-                fullWidth
-                type="password"
-                label="Gemini AI API Key (Optional)"
-                value={geminiApiKey}
-                onChange={(e) => setGeminiApiKey(e.target.value)}
-                placeholder="AIzaSy..."
-                helperText="Powers AI Vision date extraction. Enter your personal key from aistudio.google.com"
                 sx={{ mb: 3 }}
               />
 

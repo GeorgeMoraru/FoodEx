@@ -218,15 +218,15 @@ export default function ScannerModal({ open, onClose, onDateScanned, settings })
     let engineUsed = '';
     let apiErrorMsg = '';
 
-    // Check for Gemini API key (from settings/localStorage) or Proxy URL
+    // Check for Gemini API key / Proxy in hierarchy
     const cleanKey = (key) => {
       if (!key) return null;
       return key.trim().replace(/^["']|["']$/g, '');
     };
-    const userApiKey = cleanKey(settings?.geminiApiKey || localStorage.getItem('gemini_api_key'));
     const proxyUrl = import.meta.env.VITE_VITE_GEMINI_PROXY_URL || import.meta.env.VITE_GEMINI_PROXY_URL;
+    const envApiKey = cleanKey(import.meta.env.VITE_GEMINI_API_KEY);
     const isPlaceholder = (key) => !key || key.toLowerCase().includes('your-') || key.toLowerCase().includes('placeholder');
-    const apiKey = !isPlaceholder(userApiKey) ? userApiKey : null;
+    const apiKey = !isPlaceholder(envApiKey) ? envApiKey : null;
 
     if (proxyUrl || apiKey) {
       try {
@@ -398,8 +398,13 @@ export default function ScannerModal({ open, onClose, onDateScanned, settings })
     }
   };
 
-  const userApiKey = settings?.geminiApiKey || localStorage.getItem('gemini_api_key');
-  const hasGeminiConfigured = !!(userApiKey || import.meta.env.VITE_VITE_GEMINI_PROXY_URL || import.meta.env.VITE_GEMINI_PROXY_URL);
+  const cleanKey = (key) => {
+    if (!key) return null;
+    return key.trim().replace(/^["']|["']$/g, '');
+  };
+  const envApiKey = cleanKey(import.meta.env.VITE_GEMINI_API_KEY);
+  const isPlaceholder = (key) => !key || key.toLowerCase().includes('your-') || key.toLowerCase().includes('placeholder');
+  const hasGeminiConfigured = (envApiKey && !isPlaceholder(envApiKey)) || !!(import.meta.env.VITE_VITE_GEMINI_PROXY_URL || import.meta.env.VITE_GEMINI_PROXY_URL);
 
   return (
     <Modal open={open} onClose={onClose} closeAfterTransition aria-labelledby="scanner-modal-title">
@@ -543,12 +548,6 @@ export default function ScannerModal({ open, onClose, onDateScanned, settings })
                 />
               </Button>
             </Box>
-
-            {!hasGeminiConfigured && (
-              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5, textAlign: 'center' }}>
-                💡 Tip: Add a free Gemini API key in <strong>Settings</strong> for high-accuracy AI Vision date recognition.
-              </Typography>
-            )}
           </Box>
         </Box>
       </Fade>
