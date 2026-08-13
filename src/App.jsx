@@ -158,7 +158,7 @@ export default function App() {
           setCurrentTab={setCurrentTab} 
           darkMode={darkMode} 
           setDarkMode={setDarkMode} 
-          username={user.displayName || user.email}
+          username={activeUser?.displayName || activeUser?.email || 'Guest Tester'}
           onLogout={handleLogout}
         />
         
