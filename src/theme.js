@@ -40,7 +40,7 @@ export const getTheme = (mode) => createTheme({
     },
   },
   shape: {
-    borderRadius: '4px',
+    borderRadius: 4,
   },
   components: {
     MuiButton: {

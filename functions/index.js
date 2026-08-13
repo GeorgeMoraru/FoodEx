@@ -39,44 +39,52 @@ export const extractExpirationDate = onCall(
       throw new HttpsError('internal', 'Gemini API key not configured on server.');
     }
 
-    try {
-      const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{
-              parts: [
-                {
-                  text: "Extract the expiration date from this image. Return ONLY the date in YYYY-MM-DD format. If no clear expiration date is found, return the exact word 'null'."
-                },
-                {
-                  inlineData: {
-                    mimeType: 'image/jpeg',
-                    data: imageBase64
+    const modelsToTry = ['gemini-1.5-flash', 'gemini-2.0-flash', 'gemini-1.5-pro'];
+    let lastError = null;
+
+    for (const modelName of modelsToTry) {
+      try {
+        const response = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              contents: [{
+                parts: [
+                  {
+                    text: "Extract the expiration date from this image. Return ONLY the date in YYYY-MM-DD format. If no clear expiration date is found, return the exact word 'null'."
+                  },
+                  {
+                    inlineData: {
+                      mimeType: 'image/jpeg',
+                      data: imageBase64
+                    }
                   }
-                }
-              ]
-            }]
-          })
+                ]
+              }]
+            })
+          }
+        );
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error(`Gemini API (${modelName}) error:`, response.status, errorText);
+          lastError = new HttpsError('internal', `Gemini API (${modelName}) returned status ${response.status}`);
+          continue;
         }
-      );
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('Gemini API error:', response.status, errorText);
-        throw new HttpsError('internal', `Gemini API returned status ${response.status}`);
+        const data = await response.json();
+        const textResponse = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+
+        return { date: textResponse || null };
+      } catch (err) {
+        console.error(`Error calling Gemini model ${modelName}:`, err);
+        lastError = err;
       }
-
-      const data = await response.json();
-      const textResponse = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
-
-      return { date: textResponse || null };
-    } catch (err) {
-      if (err instanceof HttpsError) throw err;
-      console.error('Gemini proxy error:', err);
-      throw new HttpsError('internal', 'Failed to process image.');
     }
+
+    if (lastError instanceof HttpsError) throw lastError;
+    throw new HttpsError('internal', 'Failed to process image with Gemini API.');
   }
 );

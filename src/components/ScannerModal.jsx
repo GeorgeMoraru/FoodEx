@@ -9,6 +9,7 @@ import {
   FileUpload as UploadIcon 
 } from '@mui/icons-material';
 import Tesseract from 'tesseract.js';
+import { auth } from '../utils/firebase';
 
 export function parseDateFromText(text) {
   if (!text) return null;
@@ -221,14 +222,25 @@ export default function ScannerModal({ open, onClose, onDateScanned, settings })
     const userApiKey = settings?.geminiApiKey || localStorage.getItem('gemini_api_key');
     const proxyUrl = import.meta.env.VITE_GEMINI_PROXY_URL;
     const envApiKey = import.meta.env.VITE_GEMINI_API_KEY;
-    const apiKey = userApiKey || envApiKey;
+    
+    const isPlaceholder = (key) => !key || key.trim() === '' || key.toLowerCase().includes('your-') || key.toLowerCase().includes('placeholder');
+    const apiKey = !isPlaceholder(userApiKey) ? userApiKey : (!isPlaceholder(envApiKey) ? envApiKey : null);
 
     if (proxyUrl || apiKey) {
       try {
         if (proxyUrl) {
+          const headers = { 'Content-Type': 'application/json' };
+          if (auth.currentUser) {
+            try {
+              const token = await auth.currentUser.getIdToken();
+              headers['Authorization'] = `Bearer ${token}`;
+            } catch (tokenErr) {
+              console.warn('[FoodEx Scanner] Could not retrieve Firebase ID token:', tokenErr);
+            }
+          }
           const response = await fetch(proxyUrl, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers,
             body: JSON.stringify({ data: { imageBase64: base64Data } })
           });
           if (response.ok) {
