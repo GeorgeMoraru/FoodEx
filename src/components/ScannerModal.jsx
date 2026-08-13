@@ -402,7 +402,13 @@ export default function ScannerModal({ open, onClose, onDateScanned, settings })
     }
   };
 
-  const userApiKey = settings?.geminiApiKey || localStorage.getItem('gemini_api_key');
+  const cleanKey = (key) => {
+    if (!key) return null;
+    return key.trim().replace(/^["']|["']$/g, '');
+  };
+  const envApiKey = cleanKey(import.meta.env.VITE_GEMINI_API_KEY);
+  const isPlaceholder = (key) => !key || key.toLowerCase().includes('your-') || key.toLowerCase().includes('placeholder');
+  const hasGeminiConfigured = envApiKey && !isPlaceholder(envApiKey);
 
   return (
     <Modal open={open} onClose={onClose} closeAfterTransition aria-labelledby="scanner-modal-title">
@@ -547,9 +553,9 @@ export default function ScannerModal({ open, onClose, onDateScanned, settings })
               </Button>
             </Box>
 
-            {!userApiKey && (
+            {!hasGeminiConfigured && (
               <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5, textAlign: 'center' }}>
-                💡 Tip: Add a free Gemini API key in <strong>Settings</strong> for high-accuracy AI Vision date recognition.
+                💡 Tip: Set up a `VITE_GEMINI_API_KEY` in GitHub Secrets for high-accuracy AI Vision date recognition.
               </Typography>
             )}
           </Box>
