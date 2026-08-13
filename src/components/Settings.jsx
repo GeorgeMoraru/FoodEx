@@ -8,7 +8,8 @@ import {
   Notifications as PushIcon, SettingsInputSvideo as HAIcon,
   ContentCopy as CopyIcon, Refresh as RefreshIcon,
   Delete as DeleteIcon, Group as GroupIcon, Add as AddIcon,
-  MeetingRoom as LeaveIcon
+  MeetingRoom as LeaveIcon, Email as EmailIcon, Send as SendIcon,
+  CheckCircle as AcceptIcon, Cancel as RejectIcon, Share as ShareIcon
 } from '@mui/icons-material';
 import dbClient from '../utils/dbClient';
 import { getVapidPublicKey } from '../utils/vapid';
@@ -40,6 +41,10 @@ export default function Settings({ settings, pushSubscriptions, onRefresh }) {
   // Household sharing state
   const [members, setMembers] = useState([]);
   const [targetHouseholdId, setTargetHouseholdId] = useState('');
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [sentInvites, setSentInvites] = useState([]);
+  const [myInvites, setMyInvites] = useState([]);
+  const [inviteSuccessLink, setInviteSuccessLink] = useState(null);
   
   // Custom locations state
   const [newLocationName, setNewLocationName] = useState('');
@@ -53,6 +58,7 @@ export default function Settings({ settings, pushSubscriptions, onRefresh }) {
   useEffect(() => {
     checkPushSupport();
     fetchMembers();
+    fetchInvites();
   }, [pushSubscriptions]);
 
   const fetchMembers = async () => {
@@ -61,6 +67,19 @@ export default function Settings({ settings, pushSubscriptions, onRefresh }) {
       setMembers(list);
     } catch (err) {
       console.error('Error fetching household members:', err);
+    }
+  };
+
+  const fetchInvites = async () => {
+    try {
+      const [sent, forMe] = await Promise.all([
+        dbClient.getHouseholdInvites().catch(() => []),
+        dbClient.getInvitesForMe().catch(() => [])
+      ]);
+      setSentInvites(sent);
+      setMyInvites(forMe);
+    } catch (err) {
+      console.error('Error fetching invites:', err);
     }
   };
 
@@ -213,8 +232,75 @@ export default function Settings({ settings, pushSubscriptions, onRefresh }) {
       setSuccess('Returned to private household!');
       onRefresh();
       fetchMembers();
+      fetchInvites();
     } catch (err) {
       setError('Failed to leave household: ' + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSendInvite = async (e) => {
+    e.preventDefault();
+    const email = inviteEmail.trim();
+    if (!email) return;
+
+    setLoading(true);
+    setError('');
+    setSuccess('');
+    try {
+      const res = await dbClient.inviteToHouseholdByEmail(email);
+      setSuccess(`Invitation sent to ${email}!`);
+      setInviteSuccessLink(res.joinUrl);
+      setInviteEmail('');
+      fetchInvites();
+    } catch (err) {
+      setError(err.message || 'Failed to send invitation.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCancelInvite = async (inviteId) => {
+    setLoading(true);
+    setError('');
+    try {
+      await dbClient.cancelInvite(inviteId);
+      setSuccess('Invitation cancelled.');
+      fetchInvites();
+    } catch (err) {
+      setError('Failed to cancel invite: ' + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAcceptInvite = async (invite) => {
+    setLoading(true);
+    setError('');
+    setSuccess('');
+    try {
+      await dbClient.acceptInvite(invite.id, invite.householdId);
+      setSuccess(`Successfully joined household from ${invite.invitedByName || 'invite'}!`);
+      onRefresh();
+      fetchMembers();
+      fetchInvites();
+    } catch (err) {
+      setError('Failed to accept invitation: ' + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRejectInvite = async (inviteId) => {
+    setLoading(true);
+    setError('');
+    try {
+      await dbClient.rejectInvite(inviteId);
+      setSuccess('Invitation declined.');
+      fetchInvites();
+    } catch (err) {
+      setError('Failed to decline invitation: ' + err.message);
     } finally {
       setLoading(false);
     }
@@ -336,6 +422,42 @@ export default function Settings({ settings, pushSubscriptions, onRefresh }) {
   return (
     <Box sx={{ p: 1 }}>
       <Typography variant="h4" sx={{ fontWeight: 'bold', mb: 4 }}>Settings</Typography>
+
+      {/* Invitations For You Banner */}
+      {myInvites.length > 0 && (
+        <Paper sx={{ p: 3, mb: 4, bgcolor: 'primary.light', color: 'primary.contrastText', borderRadius: 2 }}>
+          <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
+            <EmailIcon /> You have an invitation to join a household!
+          </Typography>
+          {myInvites.map((inv) => (
+            <Box key={inv.id} sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mt: 2, flexWrap: 'wrap', gap: 1 }}>
+              <Typography variant="body1">
+                <strong>{inv.invitedByName}</strong> ({inv.invitedByEmail}) invited you to share their food inventory.
+              </Typography>
+              <Box sx={{ display: 'flex', gap: 1 }}>
+                <Button 
+                  variant="contained" 
+                  color="success" 
+                  startIcon={<AcceptIcon />} 
+                  onClick={() => handleAcceptInvite(inv)}
+                  disabled={loading}
+                >
+                  Accept & Join
+                </Button>
+                <Button 
+                  variant="outlined" 
+                  sx={{ color: 'inherit', borderColor: 'currentColor' }} 
+                  startIcon={<RejectIcon />} 
+                  onClick={() => handleRejectInvite(inv.id)}
+                  disabled={loading}
+                >
+                  Decline
+                </Button>
+              </Box>
+            </Box>
+          ))}
+        </Paper>
+      )}
 
       {error && <Alert severity="error" sx={{ mb: 3 }}>{error}</Alert>}
       {success && <Alert severity="success" sx={{ mb: 3 }}>{success}</Alert>}
@@ -524,15 +646,89 @@ export default function Settings({ settings, pushSubscriptions, onRefresh }) {
               </Box>
             )}
 
+            {/* Invite by Email Section */}
+            <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 1 }}>Invite via Email:</Typography>
+            <Box component="form" onSubmit={handleSendInvite} sx={{ display: 'flex', gap: 1, mb: 2 }}>
+              <TextField
+                fullWidth
+                size="small"
+                type="email"
+                label="Partner / Family Member Email"
+                placeholder="family@example.com"
+                value={inviteEmail}
+                onChange={(e) => setInviteEmail(e.target.value)}
+              />
+              <Button 
+                type="submit" 
+                variant="contained" 
+                color="primary"
+                startIcon={<SendIcon />}
+                disabled={loading || !inviteEmail.trim()}
+              >
+                Invite
+              </Button>
+            </Box>
+
+            {inviteSuccessLink && (
+              <Alert 
+                severity="info" 
+                sx={{ mb: 2 }}
+                action={
+                  <Box sx={{ display: 'flex', gap: 0.5 }}>
+                    <Button size="small" color="inherit" onClick={() => copyToClipboard(inviteSuccessLink)}>
+                      Copy Link
+                    </Button>
+                    <Button 
+                      size="small" 
+                      color="inherit" 
+                      href={`mailto:?subject=${encodeURIComponent("Join my FoodEx Household")}&body=${encodeURIComponent("Join my FoodEx household to share our food expiration inventory in real time:\n\n" + inviteSuccessLink)}`}
+                    >
+                      Email
+                    </Button>
+                  </Box>
+                }
+              >
+                Invite link generated!
+              </Alert>
+            )}
+
+            {/* Sent Pending Invites */}
+            {sentInvites.length > 0 && (
+              <Box sx={{ mb: 3 }}>
+                <Typography variant="caption" sx={{ fontWeight: 'bold', color: 'text.secondary', display: 'block', mb: 0.5 }}>
+                  Pending Invitations:
+                </Typography>
+                <List dense sx={{ bgcolor: 'action.hover', borderRadius: 1 }}>
+                  {sentInvites.map((inv) => (
+                    <ListItem key={inv.id}>
+                      <ListItemText 
+                        primary={inv.invitedEmail} 
+                        secondary={`Invited on ${new Date(inv.createdAt).toLocaleDateString()}`} 
+                      />
+                      <ListItemSecondaryAction>
+                        <IconButton size="small" color="error" onClick={() => handleCancelInvite(inv.id)} title="Cancel Invite">
+                          <DeleteIcon fontSize="small" />
+                        </IconButton>
+                      </ListItemSecondaryAction>
+                    </ListItem>
+                  ))}
+                </List>
+              </Box>
+            )}
+
+            <Divider sx={{ my: 2 }} />
+
+            <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 1 }}>Or Join Manually with ID:</Typography>
             <Box component="form" onSubmit={handleJoinHousehold} sx={{ display: 'flex', gap: 1, mb: 2 }}>
               <TextField
                 fullWidth
+                size="small"
                 label="Join Household ID"
                 placeholder="Paste Household ID here"
                 value={targetHouseholdId}
                 onChange={(e) => setTargetHouseholdId(e.target.value)}
               />
-              <Button type="submit" variant="contained" disabled={loading || !targetHouseholdId.trim()}>
+              <Button type="submit" variant="outlined" disabled={loading || !targetHouseholdId.trim()}>
                 Join
               </Button>
             </Box>
@@ -545,6 +741,7 @@ export default function Settings({ settings, pushSubscriptions, onRefresh }) {
                 onClick={handleLeaveHousehold}
                 disabled={loading}
                 fullWidth
+                sx={{ mt: 1 }}
               >
                 Leave Shared Household
               </Button>

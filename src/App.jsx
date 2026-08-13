@@ -72,6 +72,24 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
+  // Handle ?join=<householdId> link parameter
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const joinHouseholdId = urlParams.get('join');
+    if (joinHouseholdId && (user || guestUser)) {
+      if (window.confirm(`Would you like to join household "${joinHouseholdId}"? Your inventory will be shared with this household.`)) {
+        dbClient.joinHousehold(joinHouseholdId)
+          .then(() => {
+            fetchDatabase();
+            window.history.replaceState({}, document.title, window.location.pathname);
+          })
+          .catch((err) => {
+            setError('Failed to join household from link: ' + err.message);
+          });
+      }
+    }
+  }, [user, guestUser]);
+
   // Save theme selection
   useEffect(() => {
     localStorage.setItem('foodex_theme', darkMode ? 'dark' : 'light');

@@ -1,5 +1,5 @@
 import { auth, db as firestore, firebaseConfig } from './firebase';
-import { doc, getDoc, setDoc, runTransaction, collection, query, where, getDocs } from 'firebase/firestore';
+import { doc, getDoc, setDoc, runTransaction, collection, query, where, getDocs, deleteDoc } from 'firebase/firestore';
 
 class DbClient {
   constructor() {
@@ -250,6 +250,108 @@ class DbClient {
       });
     });
     return members;
+  }
+
+  // ─── Email Invitations ──────────────────────────────────────────────────
+
+  async inviteToHouseholdByEmail(email) {
+    if (!this.uid) throw new Error('Not authenticated');
+    const cleanEmail = email.toLowerCase().trim();
+    if (!cleanEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+      throw new Error('Please enter a valid email address.');
+    }
+
+    if (!this.cachedHouseholdId) {
+      await this.getDbFile();
+    }
+    const householdId = this.cachedHouseholdId || this.uid;
+
+    if (this.isGuest) {
+      const inviteId = 'guest-invite-' + Date.now();
+      const existing = JSON.parse(localStorage.getItem('foodex_guest_invites') || '[]');
+      existing.push({
+        id: inviteId,
+        householdId,
+        invitedEmail: cleanEmail,
+        invitedByName: 'Guest Tester',
+        invitedByEmail: 'guest@foodex.local',
+        createdAt: new Date().toISOString()
+      });
+      localStorage.setItem('foodex_guest_invites', JSON.stringify(existing));
+      const joinUrl = `${window.location.origin}${window.location.pathname}?join=${encodeURIComponent(householdId)}`;
+      return { inviteId, joinUrl };
+    }
+
+    const inviteId = self.crypto?.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2, 15) + Date.now().toString(36);
+    const inviteRef = doc(firestore, 'invitations', inviteId);
+    
+    await setDoc(inviteRef, {
+      id: inviteId,
+      householdId,
+      invitedEmail: cleanEmail,
+      invitedByName: auth.currentUser?.displayName || auth.currentUser?.email || 'A FoodEx User',
+      invitedByEmail: auth.currentUser?.email || '',
+      invitedByUid: this.uid,
+      createdAt: new Date().toISOString()
+    });
+
+    const joinUrl = `${window.location.origin}${window.location.pathname}?join=${encodeURIComponent(householdId)}`;
+    return { inviteId, joinUrl };
+  }
+
+  async getHouseholdInvites() {
+    if (!this.uid) throw new Error('Not authenticated');
+    if (!this.cachedHouseholdId) {
+      await this.getDbFile();
+    }
+    const householdId = this.cachedHouseholdId || this.uid;
+
+    if (this.isGuest) {
+      return JSON.parse(localStorage.getItem('foodex_guest_invites') || '[]');
+    }
+
+    const q = query(
+      collection(firestore, 'invitations'),
+      where('householdId', '==', householdId)
+    );
+    const snap = await getDocs(q);
+    const invites = [];
+    snap.forEach((d) => invites.push({ id: d.id, ...d.data() }));
+    return invites;
+  }
+
+  async getInvitesForMe() {
+    if (!this.uid || this.isGuest) return [];
+    const userEmail = auth.currentUser?.email?.toLowerCase();
+    if (!userEmail) return [];
+
+    const q = query(
+      collection(firestore, 'invitations'),
+      where('invitedEmail', '==', userEmail)
+    );
+    const snap = await getDocs(q);
+    const invites = [];
+    snap.forEach((d) => invites.push({ id: d.id, ...d.data() }));
+    return invites;
+  }
+
+  async cancelInvite(inviteId) {
+    if (this.isGuest) {
+      const existing = JSON.parse(localStorage.getItem('foodex_guest_invites') || '[]');
+      localStorage.setItem('foodex_guest_invites', JSON.stringify(existing.filter(i => i.id !== inviteId)));
+      return;
+    }
+    const inviteRef = doc(firestore, 'invitations', inviteId);
+    await deleteDoc(inviteRef);
+  }
+
+  async acceptInvite(inviteId, targetHouseholdId) {
+    await this.joinHousehold(targetHouseholdId);
+    await this.cancelInvite(inviteId);
+  }
+
+  async rejectInvite(inviteId) {
+    await this.cancelInvite(inviteId);
   }
 
   // ─── Images (Replaced by Wikipedia URLs) ─────────────────────────────────
