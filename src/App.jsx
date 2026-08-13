@@ -20,6 +20,7 @@ export default function App() {
   });
   const [authChecking, setAuthChecking] = useState(true);
   const [db, setDb] = useState(null);
+  const [households, setHouseholds] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -38,9 +39,19 @@ export default function App() {
 
   const activeUser = user || guestUser;
 
+  const fetchHouseholds = async () => {
+    try {
+      const list = await dbClient.getUserHouseholds();
+      setHouseholds(list);
+    } catch (e) {
+      console.error('Error fetching user households:', e);
+    }
+  };
+
   // Check auth status on load and handle redirect authentication
   useEffect(() => {
     if (localStorage.getItem('foodex_guest_mode') === 'true') {
+      fetchHouseholds();
       fetchDatabase();
     }
 
@@ -60,27 +71,31 @@ export default function App() {
       if (currentUser) {
         try {
           await dbClient.initializeDbIfMissing();
-          fetchDatabase();
+          await fetchHouseholds();
+          await fetchDatabase();
         } catch (dbErr) {
           console.error('Database initialization error:', dbErr);
           setError(dbErr.message || 'Failed to initialize database.');
         }
       } else if (!localStorage.getItem('foodex_guest_mode')) {
         setDb(null);
+        setHouseholds([]);
       }
     });
     return () => unsubscribe();
   }, []);
 
-  // Handle ?join=<householdId> link parameter
+  // Handle ?join=<householdId>&name=<householdName> link parameter
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     const joinHouseholdId = urlParams.get('join');
+    const joinHouseholdName = urlParams.get('name') || 'Shared Household';
     if (joinHouseholdId && (user || guestUser)) {
-      if (window.confirm(`Would you like to join household "${joinHouseholdId}"? Your inventory will be shared with this household.`)) {
-        dbClient.joinHousehold(joinHouseholdId)
-          .then(() => {
-            fetchDatabase();
+      if (window.confirm(`Would you like to join household "${joinHouseholdName}"? You will be added as a member.`)) {
+        dbClient.acceptInvite('direct_link', joinHouseholdId, joinHouseholdName)
+          .then(async () => {
+            await fetchHouseholds();
+            await fetchDatabase();
             window.history.replaceState({}, document.title, window.location.pathname);
           })
           .catch((err) => {
@@ -115,16 +130,43 @@ export default function App() {
     }
   };
 
-  const handleLoginSuccess = () => {
-    // onAuthStateChanged handles the state, but we can proactively fetch
-    fetchDatabase();
+  const handleSwitchHousehold = async (id) => {
+    setLoading(true);
+    try {
+      await dbClient.switchHousehold(id);
+      await fetchHouseholds();
+      await fetchDatabase();
+    } catch (err) {
+      setError('Failed to switch household: ' + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCreateHousehold = async (name) => {
+    setLoading(true);
+    try {
+      await dbClient.createHousehold(name);
+      await fetchHouseholds();
+      await fetchDatabase();
+    } catch (err) {
+      setError('Failed to create household: ' + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleLoginSuccess = async () => {
+    await fetchHouseholds();
+    await fetchDatabase();
     setCurrentTab('dashboard');
   };
 
-  const handleGuestLogin = () => {
+  const handleGuestLogin = async () => {
     localStorage.setItem('foodex_guest_mode', 'true');
     setGuestUser({ uid: 'guest-user', email: 'guest@foodex.local', displayName: 'Guest Tester' });
-    fetchDatabase();
+    await fetchHouseholds();
+    await fetchDatabase();
     setCurrentTab('dashboard');
   };
 
@@ -133,6 +175,7 @@ export default function App() {
     setGuestUser(null);
     dbClient.clearCredentials();
     setDb(null);
+    setHouseholds([]);
   };
 
   const handleAddProductClick = () => {
@@ -178,6 +221,10 @@ export default function App() {
           setDarkMode={setDarkMode} 
           username={activeUser?.displayName || activeUser?.email || 'Guest Tester'}
           onLogout={handleLogout}
+          households={households}
+          activeHouseholdId={dbClient.householdId}
+          onSwitchHousehold={handleSwitchHousehold}
+          onCreateHousehold={handleCreateHousehold}
         />
         
         <Container maxWidth="lg" sx={{ mt: 3 }}>
@@ -227,6 +274,8 @@ export default function App() {
                       settings={db.settings || {}}
                       pushSubscriptions={db.pushSubscriptions || []}
                       onRefresh={fetchDatabase}
+                      households={households}
+                      onHouseholdsChange={setHouseholds}
                     />
                   </Box>
                 </Fade>

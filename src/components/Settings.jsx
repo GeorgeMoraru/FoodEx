@@ -2,14 +2,16 @@ import React, { useState, useEffect } from 'react';
 import { 
   Box, Typography, Paper, TextField, Button, Grid, 
   CircularProgress, Alert, Divider, FormControlLabel, Switch, IconButton,
-  List, ListItem, ListItemText, ListItemSecondaryAction
+  List, ListItem, ListItemText, ListItemSecondaryAction, Chip, Dialog,
+  DialogTitle, DialogContent, DialogActions
 } from '@mui/material';
 import { 
   Notifications as PushIcon, SettingsInputSvideo as HAIcon,
   ContentCopy as CopyIcon, Refresh as RefreshIcon,
   Delete as DeleteIcon, Group as GroupIcon, Add as AddIcon,
   MeetingRoom as LeaveIcon, Email as EmailIcon, Send as SendIcon,
-  CheckCircle as AcceptIcon, Cancel as RejectIcon, Share as ShareIcon
+  CheckCircle as AcceptIcon, Cancel as RejectIcon, Edit as EditIcon,
+  Home as HomeIcon, Check as CheckIcon
 } from '@mui/icons-material';
 import dbClient from '../utils/dbClient';
 import { getVapidPublicKey } from '../utils/vapid';
@@ -29,7 +31,10 @@ function urlBase64ToUint8Array(base64String) {
   return outputArray;
 }
 
-export default function Settings({ settings, pushSubscriptions, onRefresh }) {
+export default function Settings({ 
+  settings, pushSubscriptions, onRefresh, 
+  households = [], onHouseholdsChange 
+}) {
   const [notificationDaysBefore, setNotificationDaysBefore] = useState(settings.notificationDaysBefore || 3);
   const [emailAlertsEnabled, setEmailAlertsEnabled] = useState(settings.emailAlertsEnabled || false);
   const [emailAddress, setEmailAddress] = useState(settings.emailAddress || '');
@@ -39,7 +44,14 @@ export default function Settings({ settings, pushSubscriptions, onRefresh }) {
   const [isSubscribed, setIsSubscribed] = useState(false);
   const [notificationSupport, setNotificationSupport] = useState(true);
 
-  // Household sharing state
+  // Household management state
+  const [userHouseholds, setUserHouseholds] = useState(households);
+  const [newHouseholdName, setNewHouseholdName] = useState('');
+  const [renameDialogOpen, setRenameDialogOpen] = useState(false);
+  const [renamingHousehold, setRenamingHousehold] = useState(null);
+  const [renameValue, setRenameValue] = useState('');
+
+  // Household sharing & invites state
   const [members, setMembers] = useState([]);
   const [targetHouseholdId, setTargetHouseholdId] = useState('');
   const [inviteEmail, setInviteEmail] = useState('');
@@ -55,12 +67,24 @@ export default function Settings({ settings, pushSubscriptions, onRefresh }) {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
-  // Check if browser is currently subscribed
+  const activeHousehold = userHouseholds.find(h => h.id === dbClient.householdId) || userHouseholds[0] || { name: 'Main Home', id: dbClient.householdId };
+
   useEffect(() => {
     checkPushSupport();
+    fetchHouseholds();
     fetchMembers();
     fetchInvites();
-  }, [pushSubscriptions]);
+  }, [pushSubscriptions, dbClient.householdId]);
+
+  const fetchHouseholds = async () => {
+    try {
+      const list = await dbClient.getUserHouseholds();
+      setUserHouseholds(list);
+      if (onHouseholdsChange) onHouseholdsChange(list);
+    } catch (err) {
+      console.error('Error fetching households:', err);
+    }
+  };
 
   const fetchMembers = async () => {
     try {
@@ -74,7 +98,7 @@ export default function Settings({ settings, pushSubscriptions, onRefresh }) {
   const fetchInvites = async () => {
     try {
       const [sent, forMe] = await Promise.all([
-        dbClient.getHouseholdInvites().catch(() => []),
+        dbClient.getHouseholdInvites(dbClient.householdId).catch(() => []),
         dbClient.getInvitesForMe().catch(() => [])
       ]);
       setSentInvites(sent);
@@ -144,19 +168,12 @@ export default function Settings({ settings, pushSubscriptions, onRefresh }) {
     }
   };
 
-  // Custom Locations Operations
   const handleAddLocation = async (e) => {
     e.preventDefault();
     const name = newLocationName.trim();
     if (!name) return;
 
-    // Validate location name: alphanumeric, spaces, and common characters only
-    if (!/^[\w\s\-'.()]+$/u.test(name) || name.length > 50) {
-      setError('Location name must be 1-50 characters and contain only letters, numbers, spaces, hyphens, and apostrophes.');
-      return;
-    }
-
-    if (currentLocations.some(l => l.toLowerCase() === name.toLowerCase())) {
+    if (currentLocations.includes(name)) {
       setError('Location already exists.');
       return;
     }
@@ -165,8 +182,7 @@ export default function Settings({ settings, pushSubscriptions, onRefresh }) {
     setError('');
     try {
       await dbClient.updateDb((db) => {
-        if (!db.settings.locations) db.settings.locations = ['Fridge', 'Freezer'];
-        db.settings.locations.push(name);
+        db.settings.locations = [...(db.settings.locations || ['Fridge', 'Freezer']), name];
         return db;
       });
       setNewLocationName('');
@@ -185,7 +201,7 @@ export default function Settings({ settings, pushSubscriptions, onRefresh }) {
       return;
     }
 
-    if (!window.confirm(`Are you sure you want to delete "${locationToDelete}"? Items currently stored in this location will remain, but the location itself will be removed from filters.`)) {
+    if (!window.confirm(`Are you sure you want to delete "${locationToDelete}"? Items currently stored in this location will remain.`)) {
       return;
     }
 
@@ -205,48 +221,91 @@ export default function Settings({ settings, pushSubscriptions, onRefresh }) {
     }
   };
 
-  // Household Operations
-  const handleJoinHousehold = async (e) => {
+  // ─── Household Management Handlers ─────────────────────────────────────
+
+  const handleCreateHousehold = async (e) => {
     e.preventDefault();
-    const targetId = targetHouseholdId.trim();
-    if (!targetId) return;
+    const name = newHouseholdName.trim();
+    if (!name) return;
 
     setLoading(true);
     setError('');
     setSuccess('');
     try {
-      await dbClient.joinHousehold(targetId);
-      setSuccess('Successfully joined new household!');
-      setTargetHouseholdId('');
+      await dbClient.createHousehold(name);
+      setNewHouseholdName('');
+      setSuccess(`Created household "${name}" and switched to it!`);
+      await fetchHouseholds();
       onRefresh();
-      fetchMembers();
     } catch (err) {
-      setError(err.message || 'Failed to join household.');
+      setError('Failed to create household: ' + err.message);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleLeaveHousehold = async () => {
-    if (!window.confirm('Are you sure you want to leave this household? You will return to your default isolated private household inventory.')) {
-      return;
-    }
-
+  const handleSwitchHousehold = async (id) => {
+    if (id === dbClient.householdId) return;
     setLoading(true);
     setError('');
     setSuccess('');
     try {
-      await dbClient.leaveHousehold();
-      setSuccess('Returned to private household!');
+      await dbClient.switchHousehold(id);
+      setSuccess('Switched household!');
+      await fetchHouseholds();
       onRefresh();
-      fetchMembers();
-      fetchInvites();
     } catch (err) {
-      setError('Failed to leave household: ' + err.message);
+      setError('Failed to switch household: ' + err.message);
     } finally {
       setLoading(false);
     }
   };
+
+  const handleOpenRename = (h) => {
+    setRenamingHousehold(h);
+    setRenameValue(h.name);
+    setRenameDialogOpen(true);
+  };
+
+  const handleConfirmRename = async () => {
+    if (!renamingHousehold || !renameValue.trim()) return;
+    setLoading(true);
+    try {
+      await dbClient.renameHousehold(renamingHousehold.id, renameValue.trim());
+      setRenameDialogOpen(false);
+      setSuccess(`Renamed to "${renameValue.trim()}"`);
+      await fetchHouseholds();
+      onRefresh();
+    } catch (err) {
+      setError('Failed to rename household: ' + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteHousehold = async (h) => {
+    const isOwner = h.role === 'owner';
+    const msg = isOwner 
+      ? `Are you sure you want to permanently delete household "${h.name}" and all its items?`
+      : `Are you sure you want to leave household "${h.name}"?`;
+
+    if (!window.confirm(msg)) return;
+
+    setLoading(true);
+    setError('');
+    try {
+      await dbClient.deleteOrLeaveHousehold(h.id);
+      setSuccess(isOwner ? `Deleted household "${h.name}"` : `Left household "${h.name}"`);
+      await fetchHouseholds();
+      onRefresh();
+    } catch (err) {
+      setError('Failed: ' + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ─── Per-Household Invitation Handlers ──────────────────────────────────
 
   const handleSendInvite = async (e) => {
     e.preventDefault();
@@ -257,8 +316,8 @@ export default function Settings({ settings, pushSubscriptions, onRefresh }) {
     setError('');
     setSuccess('');
     try {
-      const res = await dbClient.inviteToHouseholdByEmail(email);
-      setSuccess(`Invitation sent to ${email}!`);
+      const res = await dbClient.inviteToHouseholdByEmail(email, activeHousehold.id, activeHousehold.name);
+      setSuccess(`Invitation to "${activeHousehold.name}" sent to ${email}!`);
       setInviteSuccessLink(res.joinUrl);
       setInviteEmail('');
       fetchInvites();
@@ -288,8 +347,9 @@ export default function Settings({ settings, pushSubscriptions, onRefresh }) {
     setError('');
     setSuccess('');
     try {
-      await dbClient.acceptInvite(invite.id, invite.householdId);
-      setSuccess(`Successfully joined household from ${invite.invitedByName || 'invite'}!`);
+      await dbClient.acceptInvite(invite.id, invite.householdId, invite.householdName);
+      setSuccess(`Successfully joined "${invite.householdName || 'household'}"!`);
+      await fetchHouseholds();
       onRefresh();
       fetchMembers();
       fetchInvites();
@@ -425,22 +485,20 @@ export default function Settings({ settings, pushSubscriptions, onRefresh }) {
       - fields
     scan_interval: 300`;
 
-  const isSharedHousehold = dbClient.householdId && dbClient.householdId !== dbClient.uid;
-
   return (
     <Box sx={{ p: 1 }}>
       <Typography variant="h4" sx={{ fontWeight: 'bold', mb: 4 }}>Settings</Typography>
 
       {/* Invitations For You Banner */}
       {myInvites.length > 0 && (
-        <Paper sx={{ p: 3, mb: 4, bgcolor: 'primary.light', color: 'primary.contrastText', borderRadius: 2 }}>
+        <Paper sx={{ p: 3, mb: 4, bgcolor: 'primary.main', color: '#ffffff', borderRadius: 2 }}>
           <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
             <EmailIcon /> You have an invitation to join a household!
           </Typography>
           {myInvites.map((inv) => (
-            <Box key={inv.id} sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mt: 2, flexWrap: 'wrap', gap: 1 }}>
+            <Box key={inv.id} sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mt: 2, flexWrap: 'wrap', gap: 1, bgcolor: 'rgba(0,0,0,0.15)', p: 2, borderRadius: 1.5 }}>
               <Typography variant="body1">
-                <strong>{inv.invitedByName}</strong> ({inv.invitedByEmail}) invited you to share their food inventory.
+                <strong>{inv.invitedByName}</strong> ({inv.invitedByEmail}) invited you to join <strong>"{inv.householdName || 'Shared Household'}"</strong>.
               </Typography>
               <Box sx={{ display: 'flex', gap: 1 }}>
                 <Button 
@@ -449,12 +507,13 @@ export default function Settings({ settings, pushSubscriptions, onRefresh }) {
                   startIcon={<AcceptIcon />} 
                   onClick={() => handleAcceptInvite(inv)}
                   disabled={loading}
+                  sx={{ fontWeight: 'bold' }}
                 >
                   Accept & Join
                 </Button>
                 <Button 
                   variant="outlined" 
-                  sx={{ color: 'inherit', borderColor: 'currentColor' }} 
+                  sx={{ color: '#ffffff', borderColor: '#ffffff' }} 
                   startIcon={<RejectIcon />} 
                   onClick={() => handleRejectInvite(inv.id)}
                   disabled={loading}
@@ -471,7 +530,7 @@ export default function Settings({ settings, pushSubscriptions, onRefresh }) {
       {success && <Alert severity="success" sx={{ mb: 3 }}>{success}</Alert>}
 
       <Grid container spacing={4}>
-        {/* Left Column: Preferences, Push */}
+        {/* Left Column: Preferences & Home Assistant */}
         <Grid item xs={12} md={6}>
           <Paper sx={{ p: 3, mb: 4 }}>
             <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 3 }}>Preferences</Typography>
@@ -513,16 +572,16 @@ export default function Settings({ settings, pushSubscriptions, onRefresh }) {
 
               <Typography variant="subtitle1" sx={{ fontWeight: 'bold', mb: 1 }}>Gemini AI Vision Key (Optional)</Typography>
               <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                Stored locally in this browser. Enter your key (starts with AIzaSy...) for AI date vision, or leave blank to use the built-in local OCR engine.
+                Stored locally on this device. Enter your key (starts with AIzaSy...) for AI date vision, or leave blank to use the built-in local OCR engine.
               </Typography>
               <TextField
                 fullWidth
                 type="password"
-                label="Gemini API Key (Stored on this device)"
+                label="Gemini API Key"
                 placeholder="AIzaSy..."
                 value={localGeminiKey}
                 onChange={(e) => setLocalGeminiKey(e.target.value)}
-                helperText="Kept 100% private in local storage. Never uploaded to GitHub or public servers."
+                helperText="Stored 100% privately on your device. Never uploaded to GitHub or public servers."
                 sx={{ mb: 3 }}
               />
 
@@ -534,7 +593,7 @@ export default function Settings({ settings, pushSubscriptions, onRefresh }) {
               </Box>
 
               <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                Home Assistant can query your food status securely. By enabling this integration, an unguessable private link token is generated so Home Assistant can read your data without needing to handle complex OAuth authentication.
+                Home Assistant can query your food status securely via a private link token without complex OAuth authentication.
               </Typography>
 
               <FormControlLabel
@@ -545,7 +604,7 @@ export default function Settings({ settings, pushSubscriptions, onRefresh }) {
                     color="primary"
                   />
                 }
-                label="Enable Home Assistant Sync (Save Settings to generate token)"
+                label="Enable Home Assistant Sync (Save to generate token)"
                 sx={{ mb: 2 }}
               />
 
@@ -583,103 +642,148 @@ export default function Settings({ settings, pushSubscriptions, onRefresh }) {
             </Box>
           </Paper>
 
-          <Paper sx={{ p: 3 }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-              <PushIcon color="primary" />
-              <Typography variant="h6" sx={{ fontWeight: 'bold' }}>Push Notifications</Typography>
+          {/* Storage Locations */}
+          <Paper sx={{ p: 3, mb: 4 }}>
+            <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 1 }}>Storage Locations</Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+              Customize where you store food in <strong>"{activeHousehold.name}"</strong>.
+            </Typography>
+
+            <List dense sx={{ mb: 2 }}>
+              {currentLocations.map((loc) => (
+                <ListItem key={loc} divider>
+                  <ListItemText primary={loc} />
+                  <ListItemSecondaryAction>
+                    <IconButton edge="end" color="error" size="small" onClick={() => handleDeleteLocation(loc)}>
+                      <DeleteIcon fontSize="small" />
+                    </IconButton>
+                  </ListItemSecondaryAction>
+                </ListItem>
+              ))}
+            </List>
+
+            <Box component="form" onSubmit={handleAddLocation} sx={{ display: 'flex', gap: 1 }}>
+              <TextField
+                fullWidth
+                size="small"
+                label="New Location Name"
+                placeholder="e.g. Spice Rack, Cellar"
+                value={newLocationName}
+                onChange={(e) => setNewLocationName(e.target.value)}
+              />
+              <Button type="submit" variant="outlined" startIcon={<AddIcon />} disabled={loading || !newLocationName.trim()}>
+                Add
+              </Button>
             </Box>
-
-            {!notificationSupport ? (
-              <Alert severity="warning">
-                Browser Push notifications are not supported in this browser. Ensure you are visiting via HTTPS (or localhost) and using a modern browser.
-              </Alert>
-            ) : (
-              <Box>
-                <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-                  Subscribe to receive daily push notifications on this device when items in your inventory are close to expiring.
-                </Typography>
-
-                <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
-                  {isSubscribed ? (
-                    <>
-                      <Button variant="outlined" color="error" onClick={handleNotificationUnsubscribe} disabled={loading}>
-                        Unsubscribe
-                      </Button>
-                      <Button variant="contained" onClick={handleSendTestPush} disabled={loading}>
-                        Trigger Test Alert
-                      </Button>
-                    </>
-                  ) : (
-                    <Button variant="contained" color="primary" onClick={handleNotificationSubscribe} disabled={loading}>
-                      Subscribe This Device
-                    </Button>
-                  )}
-                </Box>
-              </Box>
-            )}
           </Paper>
         </Grid>
 
-        {/* Right Column: Household Sharing, Locations, Home Assistant */}
+        {/* Right Column: Multiple Households & Per-Household Sharing */}
         <Grid item xs={12} md={6}>
-          {/* Household Sharing Card */}
+          {/* Your Households Manager */}
+          <Paper sx={{ p: 3, mb: 4 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+              <HomeIcon color="primary" />
+              <Typography variant="h6" sx={{ fontWeight: 'bold' }}>Your Households</Typography>
+            </Box>
+
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+              Manage multiple households (e.g. "Main Home", "Vacation Cabin", "Office") with independent inventories.
+            </Typography>
+
+            <List sx={{ bgcolor: 'action.hover', borderRadius: 2, mb: 3 }}>
+              {userHouseholds.map((h) => {
+                const isCurrent = h.id === activeHousehold.id;
+                return (
+                  <ListItem key={h.id} divider sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                      <Box>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <Typography variant="subtitle1" sx={{ fontWeight: isCurrent ? 'bold' : 'normal' }}>
+                            {h.name}
+                          </Typography>
+                          {isCurrent && <Chip label="Active" color="primary" size="small" />}
+                          <Chip label={h.role || 'owner'} variant="outlined" size="small" sx={{ textTransform: 'capitalize' }} />
+                        </Box>
+                        <Typography variant="caption" color="text.secondary">ID: {h.id}</Typography>
+                      </Box>
+                    </Box>
+
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                      {!isCurrent && (
+                        <Button size="small" variant="contained" color="primary" onClick={() => handleSwitchHousehold(h.id)} disabled={loading}>
+                          Switch
+                        </Button>
+                      )}
+                      <IconButton size="small" color="inherit" onClick={() => handleOpenRename(h)} title="Rename Household">
+                        <EditIcon fontSize="small" />
+                      </IconButton>
+                      <IconButton size="small" color="error" onClick={() => handleDeleteHousehold(h)} title={h.role === 'owner' ? "Delete Household" : "Leave Household"}>
+                        <DeleteIcon fontSize="small" />
+                      </IconButton>
+                    </Box>
+                  </ListItem>
+                );
+              })}
+            </List>
+
+            {/* Create New Household Form */}
+            <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 1 }}>Create New Household:</Typography>
+            <Box component="form" onSubmit={handleCreateHousehold} sx={{ display: 'flex', gap: 1 }}>
+              <TextField
+                fullWidth
+                size="small"
+                label="Household Name"
+                placeholder="e.g. Beach Cabin, Office Pantry"
+                value={newHouseholdName}
+                onChange={(e) => setNewHouseholdName(e.target.value)}
+              />
+              <Button type="submit" variant="contained" startIcon={<AddIcon />} disabled={loading || !newHouseholdName.trim()}>
+                Create
+              </Button>
+            </Box>
+          </Paper>
+
+          {/* Household Sharing for Active Household */}
           <Paper sx={{ p: 3, mb: 4 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
               <GroupIcon color="primary" />
-              <Typography variant="h6" sx={{ fontWeight: 'bold' }}>Household Sharing</Typography>
+              <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
+                Share "{activeHousehold.name}"
+              </Typography>
             </Box>
             
             <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-              Share your inventory with other members of your household. Share your Household ID with them, or join an existing household.
+              Invite family or roommates to share the inventory of <strong>"{activeHousehold.name}"</strong>.
             </Typography>
 
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 3 }}>
               <TextField
                 fullWidth
-                label="Your Household ID"
-                value={dbClient.householdId || ''}
+                size="small"
+                label="Household ID"
+                value={activeHousehold.id || ''}
                 InputProps={{ readOnly: true }}
-                helperText="Copy and send this ID to invite others to your household."
+                helperText="Members can also join manually using this ID."
               />
               <IconButton 
                 color="primary" 
-                onClick={() => copyToClipboard(dbClient.householdId || '')}
-                sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2, p: 1.5 }}
+                onClick={() => copyToClipboard(activeHousehold.id || '')}
+                sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2, p: 1 }}
               >
                 <CopyIcon />
               </IconButton>
             </Box>
 
-            {members.length > 0 && (
-              <Box sx={{ mb: 3 }}>
-                <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 1 }}>Household Members:</Typography>
-                <List dense sx={{ bgcolor: 'action.hover', borderRadius: 2 }}>
-                  {members.map((m) => (
-                    <ListItem key={m.uid}>
-                      <ListItemText 
-                        primary={m.displayName || 'Unnamed User'} 
-                        secondary={m.email || 'No email provided'} 
-                      />
-                      {m.uid === dbClient.uid && (
-                        <ListItemSecondaryAction>
-                          <Typography variant="caption" color="text.secondary">(You)</Typography>
-                        </ListItemSecondaryAction>
-                      )}
-                    </ListItem>
-                  ))}
-                </List>
-              </Box>
-            )}
-
-            {/* Invite by Email Section */}
-            <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 1 }}>Invite via Email:</Typography>
+            {/* Invite via Email for this Household */}
+            <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 1 }}>Invite Member via Email:</Typography>
             <Box component="form" onSubmit={handleSendInvite} sx={{ display: 'flex', gap: 1, mb: 2 }}>
               <TextField
                 fullWidth
                 size="small"
                 type="email"
-                label="Partner / Family Member Email"
-                placeholder="family@example.com"
+                label="Member Email"
+                placeholder="roommate@example.com"
                 value={inviteEmail}
                 onChange={(e) => setInviteEmail(e.target.value)}
               />
@@ -706,14 +810,14 @@ export default function Settings({ settings, pushSubscriptions, onRefresh }) {
                     <Button 
                       size="small" 
                       color="inherit" 
-                      href={`mailto:?subject=${encodeURIComponent("Join my FoodEx Household")}&body=${encodeURIComponent("Join my FoodEx household to share our food expiration inventory in real time:\n\n" + inviteSuccessLink)}`}
+                      href={`mailto:?subject=${encodeURIComponent(`Join my FoodEx household: ${activeHousehold.name}`)}&body=${encodeURIComponent(`Join our "${activeHousehold.name}" FoodEx household to share our food inventory:\n\n` + inviteSuccessLink)}`}
                     >
                       Email
                     </Button>
                   </Box>
                 }
               >
-                Invite link generated!
+                Invitation link created for {activeHousehold.name}!
               </Alert>
             )}
 
@@ -721,7 +825,7 @@ export default function Settings({ settings, pushSubscriptions, onRefresh }) {
             {sentInvites.length > 0 && (
               <Box sx={{ mb: 3 }}>
                 <Typography variant="caption" sx={{ fontWeight: 'bold', color: 'text.secondary', display: 'block', mb: 0.5 }}>
-                  Pending Invitations:
+                  Pending Invitations for {activeHousehold.name}:
                 </Typography>
                 <List dense sx={{ bgcolor: 'action.hover', borderRadius: 1 }}>
                   {sentInvites.map((inv) => (
@@ -741,78 +845,51 @@ export default function Settings({ settings, pushSubscriptions, onRefresh }) {
               </Box>
             )}
 
-            <Divider sx={{ my: 2 }} />
-
-            <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 1 }}>Or Join Manually with ID:</Typography>
-            <Box component="form" onSubmit={handleJoinHousehold} sx={{ display: 'flex', gap: 1, mb: 2 }}>
-              <TextField
-                fullWidth
-                size="small"
-                label="Join Household ID"
-                placeholder="Paste Household ID here"
-                value={targetHouseholdId}
-                onChange={(e) => setTargetHouseholdId(e.target.value)}
-              />
-              <Button type="submit" variant="outlined" disabled={loading || !targetHouseholdId.trim()}>
-                Join
-              </Button>
-            </Box>
-
-            {isSharedHousehold && (
-              <Button 
-                variant="outlined" 
-                color="error" 
-                startIcon={<LeaveIcon />} 
-                onClick={handleLeaveHousehold}
-                disabled={loading}
-                fullWidth
-                sx={{ mt: 1 }}
-              >
-                Leave Shared Household
-              </Button>
+            {/* Household Members */}
+            {members.length > 0 && (
+              <Box sx={{ mb: 2 }}>
+                <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 1 }}>Active Members:</Typography>
+                <List dense sx={{ bgcolor: 'action.hover', borderRadius: 2 }}>
+                  {members.map((m) => (
+                    <ListItem key={m.uid}>
+                      <ListItemText 
+                        primary={m.displayName || 'Unnamed User'} 
+                        secondary={m.email || 'No email provided'} 
+                      />
+                      {m.uid === dbClient.uid && (
+                        <ListItemSecondaryAction>
+                          <Typography variant="caption" color="text.secondary">(You)</Typography>
+                        </ListItemSecondaryAction>
+                      )}
+                    </ListItem>
+                  ))}
+                </List>
+              </Box>
             )}
-          </Paper>
-
-          {/* Dynamic Locations Card */}
-          <Paper sx={{ p: 3, mb: 4 }}>
-            <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 1 }}>Storage Locations</Typography>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-              Customize where you store food in your household.
-            </Typography>
-
-            <List dense sx={{ mb: 2 }}>
-              {currentLocations.map((loc) => (
-                <ListItem key={loc} divider>
-                  <ListItemText primary={loc} />
-                  <ListItemSecondaryAction>
-                    <IconButton 
-                      edge="end" 
-                      color="error" 
-                      onClick={() => handleDeleteLocation(loc)}
-                      disabled={currentLocations.length <= 1 || loading}
-                    >
-                      <DeleteIcon />
-                    </IconButton>
-                  </ListItemSecondaryAction>
-                </ListItem>
-              ))}
-            </List>
-
-            <Box component="form" onSubmit={handleAddLocation} sx={{ display: 'flex', gap: 1 }}>
-              <TextField
-                fullWidth
-                label="New Location Name"
-                value={newLocationName}
-                onChange={(e) => setNewLocationName(e.target.value)}
-                placeholder="e.g. Wine Cellar"
-              />
-              <Button type="submit" variant="contained" startIcon={<AddIcon />} disabled={loading || !newLocationName.trim()}>
-                Add
-              </Button>
-            </Box>
           </Paper>
         </Grid>
       </Grid>
+
+      {/* Rename Dialog */}
+      <Dialog open={renameDialogOpen} onClose={() => setRenameDialogOpen(false)} maxWidth="xs" fullWidth>
+        <DialogTitle sx={{ fontWeight: 'bold' }}>Rename Household</DialogTitle>
+        <DialogContent>
+          <TextField
+            autoFocus
+            fullWidth
+            label="Household Name"
+            value={renameValue}
+            onChange={(e) => setRenameValue(e.target.value)}
+            sx={{ mt: 1 }}
+          />
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={() => setRenameDialogOpen(false)}>Cancel</Button>
+          <Button variant="contained" onClick={handleConfirmRename} disabled={!renameValue.trim()}>
+            Rename
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }

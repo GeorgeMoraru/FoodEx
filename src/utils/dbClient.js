@@ -198,37 +198,198 @@ class DbClient {
     return { db: null, sha: 'firestore' };
   }
 
-  // ─── Household Sharing Operations ────────────────────────────────────────
+  // ─── Multiple Households Management ────────────────────────────────────
 
-  async joinHousehold(targetHouseholdId) {
+  async getUserHouseholds() {
     if (!this.uid) throw new Error('Not authenticated');
-    
-    // Verify target household exists
-    const houseDocRef = doc(firestore, 'households', targetHouseholdId);
-    const houseSnap = await getDoc(houseDocRef);
-    if (!houseSnap.exists()) {
-      throw new Error('Household ID does not exist.');
+
+    if (this.isGuest) {
+      const saved = localStorage.getItem('foodex_guest_households');
+      if (saved) {
+        try {
+          return JSON.parse(saved);
+        } catch (e) {}
+      }
+      const initial = [{ id: 'guest-household', name: 'Main Home', role: 'owner' }];
+      localStorage.setItem('foodex_guest_households', JSON.stringify(initial));
+      return initial;
     }
-    
-    // Update user profile
-    const userDocRef = this.userRef;
-    await setDoc(userDocRef, {
+
+    const userSnap = await getDoc(this.userRef);
+    if (!userSnap.exists()) {
+      return [{ id: this.uid, name: 'Main Home', role: 'owner' }];
+    }
+
+    const data = userSnap.data();
+    if (data.households && data.households.length > 0) {
+      return data.households;
+    }
+
+    // Auto-migrate legacy user profile
+    const defaultList = [{
+      id: data.householdId || this.uid,
+      name: 'Main Home',
+      role: (data.householdId && data.householdId !== this.uid) ? 'member' : 'owner'
+    }];
+    await setDoc(this.userRef, {
+      households: defaultList,
+      activeHouseholdId: defaultList[0].id,
+      householdId: defaultList[0].id
+    }, { merge: true });
+    return defaultList;
+  }
+
+  async createHousehold(name) {
+    if (!this.uid) throw new Error('Not authenticated');
+    const cleanName = (name || '').trim();
+    if (!cleanName) throw new Error('Please enter a household name.');
+
+    const newId = 'house_' + (self.crypto?.randomUUID ? crypto.randomUUID().replace(/-/g, '').substring(0, 12) : Date.now().toString(36));
+
+    if (this.isGuest) {
+      const households = await this.getUserHouseholds();
+      const newEntry = { id: newId, name: cleanName, role: 'owner' };
+      const updated = [...households, newEntry];
+      localStorage.setItem('foodex_guest_households', JSON.stringify(updated));
+      localStorage.setItem('foodex_guest_active_household', newId);
+      this.cachedHouseholdId = newId;
+
+      const newDb = {
+        name: cleanName,
+        products: [],
+        pushSubscriptions: [],
+        settings: {
+          notificationDaysBefore: 3,
+          emailAlertsEnabled: false,
+          emailAddress: '',
+          locations: ['Fridge', 'Freezer', 'Pantry']
+        }
+      };
+      localStorage.setItem('foodex_guest_db_' + newId, JSON.stringify(newDb));
+      return newEntry;
+    }
+
+    // 1. Create household doc in Firestore
+    const houseDocRef = doc(firestore, 'households', newId);
+    const newDb = {
+      name: cleanName,
+      ownerUid: this.uid,
+      products: [],
+      pushSubscriptions: [],
+      settings: {
+        notificationDaysBefore: 3,
+        emailAlertsEnabled: false,
+        emailAddress: '',
+        locations: ['Fridge', 'Freezer', 'Pantry']
+      }
+    };
+    await setDoc(houseDocRef, newDb);
+
+    // 2. Add to user profile & make active
+    const households = await this.getUserHouseholds();
+    const newEntry = { id: newId, name: cleanName, role: 'owner' };
+    const updated = [...households, newEntry];
+
+    await setDoc(this.userRef, {
+      households: updated,
+      activeHouseholdId: newId,
+      householdId: newId
+    }, { merge: true });
+
+    this.cachedHouseholdId = newId;
+    return newEntry;
+  }
+
+  async switchHousehold(targetHouseholdId) {
+    if (!this.uid) throw new Error('Not authenticated');
+
+    if (this.isGuest) {
+      localStorage.setItem('foodex_guest_active_household', targetHouseholdId);
+      this.cachedHouseholdId = targetHouseholdId;
+      return;
+    }
+
+    await setDoc(this.userRef, {
+      activeHouseholdId: targetHouseholdId,
       householdId: targetHouseholdId
     }, { merge: true });
-    
+
     this.cachedHouseholdId = targetHouseholdId;
   }
 
-  async leaveHousehold() {
+  async renameHousehold(householdId, newName) {
     if (!this.uid) throw new Error('Not authenticated');
-    
-    // Reset user profile mapping to their own UID
-    const userDocRef = this.userRef;
-    await setDoc(userDocRef, {
-      householdId: this.uid
-    }, { merge: true });
-    
-    this.cachedHouseholdId = this.uid;
+    const cleanName = (newName || '').trim();
+    if (!cleanName) throw new Error('Household name cannot be empty.');
+
+    if (this.isGuest) {
+      const households = await this.getUserHouseholds();
+      const updated = households.map(h => h.id === householdId ? { ...h, name: cleanName } : h);
+      localStorage.setItem('foodex_guest_households', JSON.stringify(updated));
+      return;
+    }
+
+    // Update household doc
+    const houseDocRef = doc(firestore, 'households', householdId);
+    await setDoc(houseDocRef, { name: cleanName }, { merge: true });
+
+    // Update user profile list
+    const households = await this.getUserHouseholds();
+    const updated = households.map(h => h.id === householdId ? { ...h, name: cleanName } : h);
+    await setDoc(this.userRef, { households: updated }, { merge: true });
+  }
+
+  async deleteOrLeaveHousehold(householdId) {
+    if (!this.uid) throw new Error('Not authenticated');
+
+    const households = await this.getUserHouseholds();
+    const target = households.find(h => h.id === householdId);
+    if (!target) return;
+
+    const remaining = households.filter(h => h.id !== householdId);
+    let nextActive = remaining.length > 0 ? remaining[0].id : null;
+
+    if (this.isGuest) {
+      if (remaining.length === 0) {
+        const fresh = [{ id: 'guest-household', name: 'Main Home', role: 'owner' }];
+        localStorage.setItem('foodex_guest_households', JSON.stringify(fresh));
+        localStorage.setItem('foodex_guest_active_household', 'guest-household');
+        this.cachedHouseholdId = 'guest-household';
+      } else {
+        localStorage.setItem('foodex_guest_households', JSON.stringify(remaining));
+        localStorage.setItem('foodex_guest_active_household', nextActive);
+        this.cachedHouseholdId = nextActive;
+      }
+      return;
+    }
+
+    // If owner, delete the household document
+    if (target.role === 'owner') {
+      try {
+        await deleteDoc(doc(firestore, 'households', householdId));
+      } catch (e) {
+        console.warn('Could not delete household doc:', e);
+      }
+    }
+
+    if (remaining.length === 0) {
+      // Recreate default household
+      const defaultId = this.uid;
+      const defaultEntry = { id: defaultId, name: 'Main Home', role: 'owner' };
+      await setDoc(this.userRef, {
+        households: [defaultEntry],
+        activeHouseholdId: defaultId,
+        householdId: defaultId
+      }, { merge: true });
+      this.cachedHouseholdId = defaultId;
+    } else {
+      await setDoc(this.userRef, {
+        households: remaining,
+        activeHouseholdId: nextActive,
+        householdId: nextActive
+      }, { merge: true });
+      this.cachedHouseholdId = nextActive;
+    }
   }
 
   async getHouseholdMembers() {
@@ -237,6 +398,10 @@ class DbClient {
       await this.getDbFile();
     }
     
+    if (this.isGuest) {
+      return [{ uid: 'guest-user', displayName: 'Guest Tester', email: 'guest@foodex.local' }];
+    }
+
     const q = query(
       collection(firestore, 'users'), 
       where('householdId', '==', this.cachedHouseholdId)
@@ -252,9 +417,9 @@ class DbClient {
     return members;
   }
 
-  // ─── Email Invitations ──────────────────────────────────────────────────
+  // ─── Per-Household Email Invitations ────────────────────────────────────
 
-  async inviteToHouseholdByEmail(email) {
+  async inviteToHouseholdByEmail(email, targetHouseholdId, targetHouseholdName) {
     if (!this.uid) throw new Error('Not authenticated');
     const cleanEmail = email.toLowerCase().trim();
     if (!cleanEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
@@ -264,7 +429,8 @@ class DbClient {
     if (!this.cachedHouseholdId) {
       await this.getDbFile();
     }
-    const householdId = this.cachedHouseholdId || this.uid;
+    const householdId = targetHouseholdId || this.cachedHouseholdId || this.uid;
+    const householdName = targetHouseholdName || 'Main Home';
 
     if (this.isGuest) {
       const inviteId = 'guest-invite-' + Date.now();
@@ -272,13 +438,14 @@ class DbClient {
       existing.push({
         id: inviteId,
         householdId,
+        householdName,
         invitedEmail: cleanEmail,
         invitedByName: 'Guest Tester',
         invitedByEmail: 'guest@foodex.local',
         createdAt: new Date().toISOString()
       });
       localStorage.setItem('foodex_guest_invites', JSON.stringify(existing));
-      const joinUrl = `${window.location.origin}${window.location.pathname}?join=${encodeURIComponent(householdId)}`;
+      const joinUrl = `${window.location.origin}${window.location.pathname}?join=${encodeURIComponent(householdId)}&name=${encodeURIComponent(householdName)}`;
       return { inviteId, joinUrl };
     }
 
@@ -288,6 +455,7 @@ class DbClient {
     await setDoc(inviteRef, {
       id: inviteId,
       householdId,
+      householdName,
       invitedEmail: cleanEmail,
       invitedByName: auth.currentUser?.displayName || auth.currentUser?.email || 'A FoodEx User',
       invitedByEmail: auth.currentUser?.email || '',
@@ -295,19 +463,20 @@ class DbClient {
       createdAt: new Date().toISOString()
     });
 
-    const joinUrl = `${window.location.origin}${window.location.pathname}?join=${encodeURIComponent(householdId)}`;
+    const joinUrl = `${window.location.origin}${window.location.pathname}?join=${encodeURIComponent(householdId)}&name=${encodeURIComponent(householdName)}`;
     return { inviteId, joinUrl };
   }
 
-  async getHouseholdInvites() {
+  async getHouseholdInvites(targetHouseholdId) {
     if (!this.uid) throw new Error('Not authenticated');
     if (!this.cachedHouseholdId) {
       await this.getDbFile();
     }
-    const householdId = this.cachedHouseholdId || this.uid;
+    const householdId = targetHouseholdId || this.cachedHouseholdId || this.uid;
 
     if (this.isGuest) {
-      return JSON.parse(localStorage.getItem('foodex_guest_invites') || '[]');
+      const all = JSON.parse(localStorage.getItem('foodex_guest_invites') || '[]');
+      return all.filter(i => i.householdId === householdId);
     }
 
     const q = query(
@@ -345,8 +514,33 @@ class DbClient {
     await deleteDoc(inviteRef);
   }
 
-  async acceptInvite(inviteId, targetHouseholdId) {
-    await this.joinHousehold(targetHouseholdId);
+  async acceptInvite(inviteId, targetHouseholdId, targetHouseholdName) {
+    const cleanName = targetHouseholdName || 'Shared Household';
+
+    if (this.isGuest) {
+      const households = await this.getUserHouseholds();
+      if (!households.some(h => h.id === targetHouseholdId)) {
+        const updated = [...households, { id: targetHouseholdId, name: cleanName, role: 'member' }];
+        localStorage.setItem('foodex_guest_households', JSON.stringify(updated));
+      }
+      await this.switchHousehold(targetHouseholdId);
+      await this.cancelInvite(inviteId);
+      return;
+    }
+
+    const households = await this.getUserHouseholds();
+    if (!households.some(h => h.id === targetHouseholdId)) {
+      const updated = [...households, { id: targetHouseholdId, name: cleanName, role: 'member' }];
+      await setDoc(this.userRef, {
+        households: updated,
+        activeHouseholdId: targetHouseholdId,
+        householdId: targetHouseholdId
+      }, { merge: true });
+    } else {
+      await this.switchHousehold(targetHouseholdId);
+    }
+
+    this.cachedHouseholdId = targetHouseholdId;
     await this.cancelInvite(inviteId);
   }
 
@@ -361,7 +555,6 @@ class DbClient {
   }
 
   async deleteImage(path) {
-    // No-op for external URLs
     return true;
   }
 }
