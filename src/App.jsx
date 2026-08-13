@@ -252,6 +252,9 @@ export default function App() {
                       onAddProductClick={handleAddProductClick} 
                       onEditProduct={handleEditProduct}
                       onRefresh={fetchDatabase}
+                      households={households}
+                      activeHouseholdId={dbClient.householdId}
+                      onSwitchHousehold={handleSwitchHousehold}
                     />
                   </Box>
                 </Fade>

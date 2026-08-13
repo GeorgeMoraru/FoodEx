@@ -8,13 +8,19 @@ import {
   Add as AddIcon, Warning as WarningIcon, 
   Cancel as CancelIcon, Kitchen as KitchenIcon,
   CheckCircle as CheckIcon, Edit as EditIcon,
-  DeleteForever as DeleteIcon
+  DeleteForever as DeleteIcon, Home as HomeIcon,
+  ArrowDropDown as ArrowDropDownIcon
 } from '@mui/icons-material';
 import dbClient from '../utils/dbClient';
 
-export default function Dashboard({ products, settings, onAddProductClick, onEditProduct, onRefresh }) {
+export default function Dashboard({ 
+  products, settings, onAddProductClick, onEditProduct, onRefresh,
+  households = [], activeHouseholdId, onSwitchHousehold
+}) {
   const [expandedCard, setExpandedCard] = useState(null); // 'active', 'expiring', 'expired', or null
   const theme = useTheme();
+
+  const activeHousehold = households.find(h => h.id === activeHouseholdId) || households[0] || { name: 'Main Home', id: activeHouseholdId };
 
   const handleUpdateStatus = async (productId, status) => {
     try {
@@ -310,22 +316,60 @@ export default function Dashboard({ products, settings, onAddProductClick, onEdi
 
   return (
     <Box sx={{ p: 1 }}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4, flexWrap: 'wrap', gap: 2 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, flexWrap: 'wrap', gap: 2 }}>
         <Box>
-          <Typography variant="h4" sx={{ fontWeight: 'bold' }}>Dashboard</Typography>
-          <Typography variant="body1" color="text.secondary">
-            Overview and management of your food inventory
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 0.5 }}>
+            <Typography variant="h4" sx={{ fontWeight: 'bold' }}>Dashboard</Typography>
+            <Chip 
+              icon={<HomeIcon fontSize="small" />} 
+              label={activeHousehold.name} 
+              color="primary" 
+              variant="outlined" 
+              size="small"
+              sx={{ fontWeight: 'bold' }}
+            />
+          </Box>
+          <Typography variant="body2" color="text.secondary">
+            Managing food inventory for <strong>"{activeHousehold.name}"</strong>
           </Typography>
         </Box>
         <Button 
           variant="contained" 
           startIcon={<AddIcon />} 
           onClick={onAddProductClick}
-          sx={{ boxShadow: 2 }}
+          sx={{ boxShadow: 2, fontWeight: 'bold' }}
         >
           Add Product
         </Button>
       </Box>
+
+      {/* Quick Household Switcher Bar */}
+      {households.length > 1 && (
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 3, overflowX: 'auto', pb: 0.5 }}>
+          <Typography variant="caption" sx={{ fontWeight: 'bold', color: 'text.secondary', mr: 0.5, whiteSpace: 'nowrap' }}>
+            HOUSEHOLD:
+          </Typography>
+          {households.map((h) => {
+            const isCurrent = h.id === activeHousehold.id;
+            return (
+              <Chip
+                key={h.id}
+                icon={<HomeIcon fontSize="small" />}
+                label={h.name}
+                color={isCurrent ? "primary" : "default"}
+                variant={isCurrent ? "filled" : "outlined"}
+                onClick={() => onSwitchHousehold && onSwitchHousehold(h.id)}
+                sx={{ 
+                  fontWeight: isCurrent ? 'bold' : 500, 
+                  cursor: 'pointer',
+                  boxShadow: isCurrent ? 2 : 0,
+                  transition: 'all 0.2s ease'
+                }}
+              />
+            );
+          })}
+        </Box>
+      )}
 
       {/* Summary Cards with Inline Expansions */}
       <Grid container spacing={3} sx={{ mb: 4 }} alignItems="flex-start">
