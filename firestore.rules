@@ -2,39 +2,26 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     
-    // Users can read any user profile if authenticated
-    // but can only write to their own profile with validated schema.
+    // Users collection: Authenticated users can read profiles and manage their own profile
     match /users/{userId} {
       allow read: if request.auth != null;
-      allow write: if request.auth != null && request.auth.uid == userId
-        && request.resource.data.keys().hasOnly(['householdId', 'email', 'displayName'])
-        && request.resource.data.householdId is string
-        && request.resource.data.householdId.size() > 0
-        && request.resource.data.householdId.size() <= 128;
+      allow write: if request.auth != null && request.auth.uid == userId;
     }
     
-    // Households can be read/written by members with schema validation.
+    // Households collection: Access granted to the household owner (uid) or members
     match /households/{householdId} {
-      allow read: if request.auth != null && (
+      allow read, write: if request.auth != null && (
         householdId == request.auth.uid ||
-        get(/databases/(default)/documents/users/$(request.auth.uid)).data.householdId == householdId
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.householdId == householdId)
       );
-      allow write: if request.auth != null && (
-        householdId == request.auth.uid ||
-        get(/databases/(default)/documents/users/$(request.auth.uid)).data.householdId == householdId
-      )
-        && request.resource.data.keys().hasOnly(['products', 'pushSubscriptions', 'settings'])
-        && request.resource.data.products is list
-        && request.resource.data.products.size() <= 5000;
     }
     
-    // Home Assistant tokens: allow individual doc reads (UUID is the secret),
-    // but BLOCK collection listing to prevent enumeration.
+    // Home Assistant private tokens
     match /ha_tokens/{tokenId} {
       allow get: if true;
       allow list: if false;
-      allow create, update: if request.auth != null;
-      allow delete: if request.auth != null;
+      allow create, update, delete: if request.auth != null;
     }
   }
 }
