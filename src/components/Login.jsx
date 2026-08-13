@@ -17,21 +17,11 @@ export default function Login({ onLoginSuccess, onGuestLogin }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const handleGuestLogin = async () => {
-    setError('');
-    setLoading(true);
-    try {
-      if (onGuestLogin) {
-        onGuestLogin();
-        return;
-      }
-      await signInAnonymously(auth);
-      await dbClient.initializeDbIfMissing();
+  const handleGuestLogin = () => {
+    if (onGuestLogin) {
+      onGuestLogin();
+    } else {
       onLoginSuccess();
-    } catch (err) {
-      console.error('Anonymous sign-in error:', err);
-      setError(`[${err.code || 'auth/error'}]: ${err.message || 'Guest sign-in failed.'}`);
-      setLoading(false);
     }
   };
 
