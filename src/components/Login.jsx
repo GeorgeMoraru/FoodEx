@@ -84,7 +84,7 @@ export default function Login({ onLoginSuccess }) {
             }}
           >
             {/* Hero Branding */}
-            <Box sx={{ textCenter: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', mb: 3 }}>
+            <Box sx={{ textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', mb: 3 }}>
               <img src="logo.png" alt="FoodEx Logo" style={{ width: 64, height: 64, borderRadius: '50%', marginBottom: 12, filter: 'drop-shadow(0 4px 12px rgba(0,0,0,0.15))' }} />
               <Typography
                 variant="h3"
@@ -122,32 +122,14 @@ export default function Login({ onLoginSuccess }) {
               startIcon={<GoogleIcon />}
               sx={{ 
                 py: 1.6, 
-                borderRadius: 2.5, 
+                borderRadius: 1, 
                 fontWeight: 700, 
                 fontSize: '1.05rem',
                 textTransform: 'none',
-                boxShadow: '0 4px 14px rgba(46, 125, 50, 0.35)'
+                boxShadow: '0 4px 14px rgba(46, 125, 50, 0.25)'
               }}
             >
               Sign in with Google
-            </Button>
-
-            <Button
-              fullWidth
-              variant="outlined"
-              size="medium"
-              disabled={loading}
-              onClick={() => handleLogin(googleProvider, true)}
-              startIcon={<OpenInNewIcon />}
-              sx={{ 
-                py: 1.2, 
-                borderRadius: 2.5, 
-                fontWeight: 600, 
-                textTransform: 'none',
-                color: 'text.secondary'
-              }}
-            >
-              Use Redirect Login (If Popups Blocked)
             </Button>
           </Box>
           
