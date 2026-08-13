@@ -256,7 +256,7 @@ export default function ScannerModal({ open, onClose, onDateScanned, settings })
             apiErrorMsg = `Gemini Proxy error (${response.status}): ${errTxt || 'Proxy call failed'}`;
           }
         } else if (apiKey) {
-          const modelsToTry = ['gemini-1.5-flash', 'gemini-2.0-flash', 'gemini-1.5-pro'];
+          const modelsToTry = ['gemini-flash-latest', 'gemini-3.7-flash', 'gemini-pro-latest', 'gemini-3.5-flash'];
           for (const modelName of modelsToTry) {
             try {
               const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`, {
