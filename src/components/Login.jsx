@@ -9,13 +9,27 @@ import CameraEnhanceIcon from '@mui/icons-material/CameraEnhance';
 import SyncIcon from '@mui/icons-material/Sync';
 import NotificationsActiveIcon from '@mui/icons-material/NotificationsActive';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
-import { signInWithPopup, signInWithRedirect } from 'firebase/auth';
+import { signInWithPopup, signInWithRedirect, signInAnonymously } from 'firebase/auth';
 import { auth, googleProvider } from '../utils/firebase';
 import dbClient from '../utils/dbClient';
 
 export default function Login({ onLoginSuccess }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  const handleGuestLogin = async () => {
+    setError('');
+    setLoading(true);
+    try {
+      await signInAnonymously(auth);
+      await dbClient.initializeDbIfMissing();
+      onLoginSuccess();
+    } catch (err) {
+      console.error('Anonymous sign-in error:', err);
+      setError(`[${err.code || 'auth/error'}]: ${err.message || 'Guest sign-in failed.'}`);
+      setLoading(false);
+    }
+  };
 
   const handleLogin = async (provider, forceRedirect = false) => {
     setError('');
@@ -111,27 +125,44 @@ export default function Login({ onLoginSuccess }) {
             </Alert>
           )}
 
-          {/* Login Action Area */}
-          <Box sx={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 2 }}>
-            <Button
-              fullWidth
-              variant="contained"
-              size="large"
-              disabled={loading}
-              onClick={() => handleLogin(googleProvider, false)}
-              startIcon={<GoogleIcon />}
-              sx={{ 
-                py: 1.6, 
-                borderRadius: 1, 
-                fontWeight: 700, 
-                fontSize: '1.05rem',
-                textTransform: 'none',
-                boxShadow: '0 4px 14px rgba(46, 125, 50, 0.25)'
-              }}
-            >
-              Sign in with Google
-            </Button>
-          </Box>
+            {/* Login Action Area */}
+            <Box sx={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+              <Button
+                fullWidth
+                variant="contained"
+                size="large"
+                disabled={loading}
+                onClick={() => handleLogin(googleProvider, false)}
+                startIcon={<GoogleIcon />}
+                sx={{ 
+                  py: 1.5, 
+                  borderRadius: 1, 
+                  fontWeight: 700, 
+                  fontSize: '1rem',
+                  textTransform: 'none',
+                  boxShadow: '0 4px 14px rgba(46, 125, 50, 0.25)'
+                }}
+              >
+                Sign in with Google
+              </Button>
+
+              <Button
+                fullWidth
+                variant="outlined"
+                size="medium"
+                disabled={loading}
+                onClick={handleGuestLogin}
+                sx={{ 
+                  py: 1.2, 
+                  borderRadius: 1, 
+                  fontWeight: 600, 
+                  fontSize: '0.95rem',
+                  textTransform: 'none'
+                }}
+              >
+                Instant Guest / Test Access
+              </Button>
+            </Box>
           
           {loading && (
             <Box sx={{ mt: 3, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1 }}>
