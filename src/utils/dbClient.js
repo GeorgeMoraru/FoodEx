@@ -56,19 +56,22 @@ class DbClient {
     if (!this.uid) throw new Error('Not authenticated');
 
     if (this.isGuest) {
-      const local = localStorage.getItem('foodex_guest_db');
+      const activeId = this.householdId;
+      const storageKey = activeId === 'guest-household' ? 'foodex_guest_db' : 'foodex_guest_db_' + activeId;
+      const local = localStorage.getItem(storageKey);
       if (local) {
         try {
           return { db: JSON.parse(local), sha: 'local' };
         } catch (e) {}
       }
       const initial = {
-        products: [
+        name: activeId === 'guest-household' ? 'Main Home' : 'Household',
+        products: activeId === 'guest-household' ? [
           { id: '1', name: 'Fresh Milk 1L', location: 'Fridge', expirationDate: new Date(Date.now() + 86400000 * 3).toISOString().substring(0, 10), quantity: 1, open: false },
           { id: '2', name: 'Organic Eggs', location: 'Fridge', expirationDate: new Date(Date.now() + 86400000 * 10).toISOString().substring(0, 10), quantity: 12, open: false },
           { id: '3', name: 'Greek Yogurt', location: 'Fridge', expirationDate: new Date(Date.now() + 86400000 * 1).toISOString().substring(0, 10), quantity: 2, open: true },
           { id: '4', name: 'Artisan Bread', location: 'Pantry', expirationDate: new Date(Date.now() - 86400000 * 1).toISOString().substring(0, 10), quantity: 1, open: true }
-        ],
+        ] : [],
         pushSubscriptions: [],
         settings: {
           notificationDaysBefore: 3,
@@ -77,7 +80,7 @@ class DbClient {
           locations: ['Fridge', 'Freezer', 'Pantry']
         }
       };
-      localStorage.setItem('foodex_guest_db', JSON.stringify(initial));
+      localStorage.setItem(storageKey, JSON.stringify(initial));
       return { db: initial, sha: 'local' };
     }
     
@@ -90,11 +93,14 @@ class DbClient {
       // First-time user, initialize user profile mapping
       await setDoc(userDocRef, {
         householdId: this.uid,
+        activeHouseholdId: this.uid,
+        households: [{ id: this.uid, name: 'Main Home', role: 'owner' }],
         email: auth.currentUser.email || '',
         displayName: auth.currentUser.displayName || ''
       });
     } else {
-      householdId = userSnap.data().householdId || this.uid;
+      const data = userSnap.data();
+      householdId = data.activeHouseholdId || data.householdId || this.uid;
     }
     
     this.cachedHouseholdId = householdId;
@@ -110,6 +116,12 @@ class DbClient {
   }
 
   async saveDbFile(db, sha) {
+    if (this.isGuest) {
+      const activeId = this.householdId;
+      const storageKey = activeId === 'guest-household' ? 'foodex_guest_db' : 'foodex_guest_db_' + activeId;
+      localStorage.setItem(storageKey, JSON.stringify(db));
+      return 'local';
+    }
     if (!this.cachedHouseholdId) {
       await this.getDbFile();
     }
