@@ -219,11 +219,16 @@ export default function ScannerModal({ open, onClose, onDateScanned, settings })
     let apiErrorMsg = '';
 
     // Check for Gemini API key / Proxy in hierarchy
-    const userApiKey = settings?.geminiApiKey || localStorage.getItem('gemini_api_key');
+    const cleanKey = (key) => {
+      if (!key) return null;
+      return key.trim().replace(/^["']|["']$/g, '');
+    };
+
+    const userApiKey = cleanKey(settings?.geminiApiKey || localStorage.getItem('gemini_api_key'));
     const proxyUrl = import.meta.env.VITE_GEMINI_PROXY_URL;
-    const envApiKey = import.meta.env.VITE_GEMINI_API_KEY;
+    const envApiKey = cleanKey(import.meta.env.VITE_GEMINI_API_KEY);
     
-    const isPlaceholder = (key) => !key || key.trim() === '' || key.toLowerCase().includes('your-') || key.toLowerCase().includes('placeholder');
+    const isPlaceholder = (key) => !key || key.toLowerCase().includes('your-') || key.toLowerCase().includes('placeholder');
     const apiKey = !isPlaceholder(userApiKey) ? userApiKey : (!isPlaceholder(envApiKey) ? envApiKey : null);
 
     if (proxyUrl || apiKey) {
