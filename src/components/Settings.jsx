@@ -34,6 +34,7 @@ export default function Settings({ settings, pushSubscriptions, onRefresh }) {
   const [emailAlertsEnabled, setEmailAlertsEnabled] = useState(settings.emailAlertsEnabled || false);
   const [emailAddress, setEmailAddress] = useState(settings.emailAddress || '');
   const [haEnabled, setHaEnabled] = useState(!!settings.haToken);
+  const [localGeminiKey, setLocalGeminiKey] = useState(() => localStorage.getItem('foodex_gemini_api_key') || '');
 
   const [isSubscribed, setIsSubscribed] = useState(false);
   const [notificationSupport, setNotificationSupport] = useState(true);
@@ -126,6 +127,13 @@ export default function Settings({ settings, pushSubscriptions, onRefresh }) {
         };
         return db;
       });
+
+      if (localGeminiKey.trim()) {
+        localStorage.setItem('foodex_gemini_api_key', localGeminiKey.trim());
+      } else {
+        localStorage.removeItem('foodex_gemini_api_key');
+      }
+
       setSuccess('Settings updated successfully!');
       onRefresh();
     } catch (err) {
@@ -498,6 +506,23 @@ export default function Settings({ settings, pushSubscriptions, onRefresh }) {
                 onChange={(e) => setEmailAddress(e.target.value)}
                 disabled={!emailAlertsEnabled}
                 helperText="Emails will be sent daily via GitHub Actions SMTP mailer."
+                sx={{ mb: 3 }}
+              />
+
+              <Divider sx={{ my: 3 }} />
+
+              <Typography variant="subtitle1" sx={{ fontWeight: 'bold', mb: 1 }}>Gemini AI Vision Key (Optional)</Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                Stored locally in this browser. Enter your key (starts with AIzaSy...) for AI date vision, or leave blank to use the built-in local OCR engine.
+              </Typography>
+              <TextField
+                fullWidth
+                type="password"
+                label="Gemini API Key (Stored on this device)"
+                placeholder="AIzaSy..."
+                value={localGeminiKey}
+                onChange={(e) => setLocalGeminiKey(e.target.value)}
+                helperText="Kept 100% private in local storage. Never uploaded to GitHub or public servers."
                 sx={{ mb: 3 }}
               />
 
