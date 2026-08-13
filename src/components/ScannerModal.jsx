@@ -126,6 +126,18 @@ function preprocessCanvasForOcr(sourceCanvas) {
   return ocrCanvas;
 }
 
+// Resize high-resolution canvas for fast sub-second OCR
+function getOptimizedCanvas(sourceCanvas, maxWidth = 960) {
+  if (sourceCanvas.width <= maxWidth) return sourceCanvas;
+  const ratio = maxWidth / sourceCanvas.width;
+  const opt = document.createElement('canvas');
+  opt.width = maxWidth;
+  opt.height = Math.round(sourceCanvas.height * ratio);
+  const ctx = opt.getContext('2d');
+  ctx.drawImage(sourceCanvas, 0, 0, opt.width, opt.height);
+  return opt;
+}
+
 export default function ScannerModal({ open, onClose, onDateScanned, settings }) {
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
@@ -145,7 +157,7 @@ export default function ScannerModal({ open, onClose, onDateScanned, settings })
     setFoundDate(null);
 
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      setError('Camera API is not accessible in this context. Use the "Upload Photo" option below to scan an image.');
+      setError('Camera API is not accessible in this context. Allow camera permissions in your browser.');
       return;
     }
 
@@ -172,11 +184,11 @@ export default function ScannerModal({ open, onClose, onDateScanned, settings })
     } else {
       console.error('Camera fallback chain error:', lastError);
       if (lastError && (lastError.name === 'NotAllowedError' || lastError.name === 'PermissionDeniedError')) {
-        setError('Camera access permission was denied by your browser. Allow camera access in your browser site settings or upload a photo of the date below.');
+        setError('Camera access permission was denied. Please allow camera access in your browser settings.');
       } else if (lastError && (lastError.name === 'NotFoundError' || lastError.name === 'DevicesNotFoundError')) {
-        setError('No camera detected on this device. You can upload an image photo of the expiration date below.');
+        setError('No camera detected on this device.');
       } else {
-        setError('Could not start live camera preview. You can choose a photo of the product date below.');
+        setError('Could not start live camera preview.');
       }
     }
   };
@@ -203,6 +215,13 @@ export default function ScannerModal({ open, onClose, onDateScanned, settings })
     return () => stopCamera();
   }, [open]);
 
+  const withTimeout = (promise, ms = 7000) => {
+    return Promise.race([
+      promise,
+      new Promise((_, reject) => setTimeout(() => reject(new Error('Operation timed out')), ms))
+    ]);
+  };
+
   const processImageForDate = async (sourceCanvas) => {
     setLoading(true);
     setError('');
@@ -210,123 +229,130 @@ export default function ScannerModal({ open, onClose, onDateScanned, settings })
     setScanEngine('');
     setFoundDate(null);
 
-    const base64Data = sourceCanvas.toDataURL('image/jpeg', 0.85).split(',')[1];
+    try {
+      const optCanvas = getOptimizedCanvas(sourceCanvas, 960);
+      const base64Data = optCanvas.toDataURL('image/jpeg', 0.82).split(',')[1];
 
-    let rawText = '';
-    let aiSuccess = false;
-    let engineUsed = '';
-    let apiErrorMsg = '';
+      let rawText = '';
+      let aiSuccess = false;
+      let engineUsed = '';
 
-    // Check for Gemini API key in hierarchy
-    const cleanKey = (key) => {
-      if (!key) return null;
-      const trimmed = key.trim().replace(/^["']|["']$/g, '');
-      const isPlaceholder = !trimmed || trimmed.toLowerCase().includes('your-') || trimmed.toLowerCase().includes('placeholder');
-      return !isPlaceholder ? trimmed : null;
-    };
+      // Check for Gemini API key in hierarchy
+      const cleanKey = (key) => {
+        if (!key) return null;
+        const trimmed = key.trim().replace(/^["']|["']$/g, '');
+        const isPlaceholder = !trimmed || trimmed.toLowerCase().includes('your-') || trimmed.toLowerCase().includes('placeholder');
+        return !isPlaceholder ? trimmed : null;
+      };
 
-    const localApiKey = cleanKey(localStorage.getItem('foodex_gemini_api_key'));
-    const proxyUrl = import.meta.env.VITE_GEMINI_PROXY_URL;
-    const envApiKey = cleanKey(import.meta.env.VITE_GEMINI_API_KEY);
-    const apiKey = localApiKey || envApiKey;
+      const localApiKey = cleanKey(localStorage.getItem('foodex_gemini_api_key'));
+      const proxyUrl = import.meta.env.VITE_GEMINI_PROXY_URL;
+      const envApiKey = cleanKey(import.meta.env.VITE_GEMINI_API_KEY);
+      const apiKey = localApiKey || envApiKey;
 
-    // 1. Try Gemini AI Vision if key/proxy is present
-    if (proxyUrl || apiKey) {
-      try {
-        if (proxyUrl) {
-          const response = await fetch(proxyUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ imageBase64: base64Data })
-          });
-          if (response.ok) {
-            const result = await response.json();
-            rawText = result.result?.date || result.date || '';
-            if (rawText && rawText.toLowerCase() !== 'null' && rawText.toLowerCase() !== 'none') {
-              aiSuccess = true;
-              engineUsed = 'Gemini AI Vision';
-            }
-          }
-        } else if (apiKey) {
-          const modelsToTry = ['gemini-flash-latest', 'gemini-3.7-flash', 'gemini-pro-latest'];
-          for (const modelName of modelsToTry) {
-            try {
-              const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  contents: [{
-                    parts: [
-                      { 
-                        text: "You are an expert OCR vision system for food expiration tracking. Look at this food package. Locate any expiration date, best before date, use by date, EXP, BB, or date stamp (e.g. 2026-08-15, 15/08/2026, 15.08.26, 08/26, 15 AUG 2026). Return ONLY the date string. If no date is present, return 'NONE'." 
-                      },
-                      { 
-                        inlineData: { mimeType: 'image/jpeg', data: base64Data } 
-                      }
-                    ]
-                  }]
-                })
-              });
-
-              if (response.ok) {
-                const data = await response.json();
-                const textOutput = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
-                if (textOutput && textOutput.toUpperCase() !== 'NONE' && textOutput.toLowerCase() !== 'null') {
-                  rawText = textOutput;
-                  aiSuccess = true;
-                  engineUsed = `Gemini AI Vision (${modelName})`;
-                  break;
-                }
+      // 1. Try Gemini AI Vision if key/proxy is present
+      if (proxyUrl || apiKey) {
+        try {
+          if (proxyUrl) {
+            const response = await withTimeout(fetch(proxyUrl, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ imageBase64: base64Data })
+            }), 5000);
+            if (response.ok) {
+              const result = await response.json();
+              rawText = result.result?.date || result.date || '';
+              if (rawText && rawText.toLowerCase() !== 'null' && rawText.toLowerCase() !== 'none') {
+                aiSuccess = true;
+                engineUsed = 'Gemini AI Vision';
               }
-            } catch (fetchErr) {
-              console.warn(`[FoodEx Scanner] ${modelName} fetch error:`, fetchErr);
+            }
+          } else if (apiKey) {
+            const modelsToTry = ['gemini-flash-latest', 'gemini-3.7-flash'];
+            for (const modelName of modelsToTry) {
+              try {
+                const response = await withTimeout(fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    contents: [{
+                      parts: [
+                        { 
+                          text: "You are an expert OCR vision system for food expiration tracking. Look at this food package. Locate any expiration date, best before date, use by date, EXP, BB, or date stamp (e.g. 2026-08-15, 15/08/2026, 15.08.26, 08/26, 15 AUG 2026). Return ONLY the date string. If no date is present, return 'NONE'." 
+                        },
+                        { 
+                          inlineData: { mimeType: 'image/jpeg', data: base64Data } 
+                        }
+                      ]
+                    }]
+                  })
+                }), 4000);
+
+                if (response.ok) {
+                  const data = await response.json();
+                  const textOutput = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
+                  if (textOutput && textOutput.toUpperCase() !== 'NONE' && textOutput.toLowerCase() !== 'null') {
+                    rawText = textOutput;
+                    aiSuccess = true;
+                    engineUsed = `Gemini AI Vision (${modelName})`;
+                    break;
+                  }
+                }
+              } catch (fetchErr) {
+                console.warn(`[FoodEx Scanner] ${modelName} fetch error:`, fetchErr);
+              }
             }
           }
+        } catch (geminiErr) {
+          console.warn('[FoodEx Scanner] Gemini error, switching to local OCR:', geminiErr);
         }
-      } catch (geminiErr) {
-        console.warn('[FoodEx Scanner] Gemini error, switching to local OCR:', geminiErr);
       }
-    }
 
-    // 2. Multi-Pass Local Tesseract.js OCR (Runs if AI didn't return a date)
-    if (!aiSuccess || !rawText) {
-      try {
-        console.log('[FoodEx Scanner] Running local multi-pass OCR...');
-        const [resOriginal, resPreprocessed] = await Promise.all([
-          Tesseract.recognize(sourceCanvas, 'eng').catch(() => null),
-          Tesseract.recognize(preprocessCanvasForOcr(sourceCanvas), 'eng').catch(() => null)
-        ]);
-        const text1 = resOriginal?.data?.text || '';
-        const text2 = resPreprocessed?.data?.text || '';
-        rawText = `${text1}\n${text2}`.trim();
-        engineUsed = 'Local Device OCR';
-      } catch (ocrErr) {
-        console.error('Tesseract OCR error:', ocrErr);
+      // 2. Fast Local Tesseract.js OCR (Runs if AI didn't return a date)
+      if (!aiSuccess || !rawText) {
+        try {
+          console.log('[FoodEx Scanner] Running local fast OCR...');
+          const prepCanvas = preprocessCanvasForOcr(optCanvas);
+          const ocrPromise = Promise.all([
+            Tesseract.recognize(optCanvas, 'eng').catch(() => null),
+            Tesseract.recognize(prepCanvas, 'eng').catch(() => null)
+          ]);
+          const [resOriginal, resPreprocessed] = await withTimeout(ocrPromise, 6000);
+          const text1 = resOriginal?.data?.text || '';
+          const text2 = resPreprocessed?.data?.text || '';
+          rawText = `${text1}\n${text2}`.trim();
+          engineUsed = 'Local Device OCR';
+        } catch (ocrErr) {
+          console.error('[FoodEx Scanner] Local OCR error or timeout:', ocrErr);
+        }
       }
-    }
 
-    setOcrText(rawText);
-    setScanEngine(engineUsed);
+      setOcrText(rawText);
+      setScanEngine(engineUsed);
 
-    // 3. Parse date from output
-    if (rawText) {
-      let parsedDate = null;
-      if (rawText.match(/^\d{4}-\d{2}-\d{2}$/)) {
-        parsedDate = new Date(rawText);
+      // 3. Parse date from output
+      if (rawText) {
+        let parsedDate = null;
+        if (rawText.match(/^\d{4}-\d{2}-\d{2}$/)) {
+          parsedDate = new Date(rawText);
+        } else {
+          parsedDate = parseDateFromText(rawText);
+        }
+
+        if (parsedDate && !isNaN(parsedDate.getTime())) {
+          setFoundDate(parsedDate);
+        } else {
+          setError('No valid expiration date found. Align the package date stamp clearly in the frame.');
+        }
       } else {
-        parsedDate = parseDateFromText(rawText);
+        setError('No date text detected. Hold the camera closer to the date stamp and ensure good lighting.');
       }
-
-      if (parsedDate && !isNaN(parsedDate.getTime())) {
-        setFoundDate(parsedDate);
-      } else {
-        setError('Could not parse a date from the scan. Align the expiration text clearly or enter your Gemini API key in Settings.');
-      }
-    } else {
-      setError('No readable date text detected. Align the package date text clearly.');
+    } catch (globalErr) {
+      console.error('[FoodEx Scanner] Processing error:', globalErr);
+      setError('Scan could not complete. Please hold steady and try again.');
+    } finally {
+      setLoading(false);
     }
-
-    setLoading(false);
   };
 
   const handleCapture = async () => {
