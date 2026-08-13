@@ -6,7 +6,12 @@ class DbClient {
     this.cachedHouseholdId = null;
   }
 
+  get isGuest() {
+    return localStorage.getItem('foodex_guest_mode') === 'true';
+  }
+
   get uid() {
+    if (this.isGuest) return 'guest-user';
     return auth.currentUser ? auth.currentUser.uid : null;
   }
 
@@ -20,13 +25,14 @@ class DbClient {
   }
 
   get householdId() {
-    return this.cachedHouseholdId;
+    return this.cachedHouseholdId || (this.isGuest ? 'guest-household' : null);
   }
 
   // ─── Authentication state (mostly handled by Firebase now) ───────────────
   
   clearCredentials() {
-    auth.signOut();
+    localStorage.removeItem('foodex_guest_mode');
+    auth.signOut().catch(() => {});
     this.cachedHouseholdId = null;
   }
 
@@ -48,6 +54,32 @@ class DbClient {
 
   async getDbFile() {
     if (!this.uid) throw new Error('Not authenticated');
+
+    if (this.isGuest) {
+      const local = localStorage.getItem('foodex_guest_db');
+      if (local) {
+        try {
+          return { db: JSON.parse(local), sha: 'local' };
+        } catch (e) {}
+      }
+      const initial = {
+        products: [
+          { id: '1', name: 'Fresh Milk 1L', location: 'Fridge', expirationDate: new Date(Date.now() + 86400000 * 3).toISOString().substring(0, 10), quantity: 1, open: false },
+          { id: '2', name: 'Organic Eggs', location: 'Fridge', expirationDate: new Date(Date.now() + 86400000 * 10).toISOString().substring(0, 10), quantity: 12, open: false },
+          { id: '3', name: 'Greek Yogurt', location: 'Fridge', expirationDate: new Date(Date.now() + 86400000 * 1).toISOString().substring(0, 10), quantity: 2, open: true },
+          { id: '4', name: 'Artisan Bread', location: 'Pantry', expirationDate: new Date(Date.now() - 86400000 * 1).toISOString().substring(0, 10), quantity: 1, open: true }
+        ],
+        pushSubscriptions: [],
+        settings: {
+          notificationDaysBefore: 3,
+          emailAlertsEnabled: false,
+          emailAddress: '',
+          locations: ['Fridge', 'Freezer', 'Pantry']
+        }
+      };
+      localStorage.setItem('foodex_guest_db', JSON.stringify(initial));
+      return { db: initial, sha: 'local' };
+    }
     
     // 1. Fetch user document to find householdId
     const userDocRef = this.userRef;
@@ -122,6 +154,15 @@ class DbClient {
   /** Transactional update to prevent concurrent overwrites */
   async updateDb(updateFn) {
     if (!this.uid) throw new Error('Not authenticated');
+
+    if (this.isGuest) {
+      const fileData = await this.getDbFile();
+      const currentDb = fileData?.db || { products: [], pushSubscriptions: [], settings: { locations: ['Fridge', 'Freezer', 'Pantry'] } };
+      const updatedDb = updateFn(currentDb);
+      localStorage.setItem('foodex_guest_db', JSON.stringify(updatedDb));
+      return { db: updatedDb, sha: 'local' };
+    }
+
     if (!this.cachedHouseholdId) {
       await this.getDbFile();
     }

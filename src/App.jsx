@@ -13,6 +13,11 @@ import dbClient from './utils/dbClient';
 
 export default function App() {
   const [user, setUser] = useState(null);
+  const [guestUser, setGuestUser] = useState(() => {
+    return localStorage.getItem('foodex_guest_mode') === 'true' 
+      ? { uid: 'guest-user', email: 'guest@foodex.local', displayName: 'Guest Tester' } 
+      : null;
+  });
   const [authChecking, setAuthChecking] = useState(true);
   const [db, setDb] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -31,8 +36,14 @@ export default function App() {
   const [productModalOpen, setProductModalOpen] = useState(false);
   const [editProduct, setEditProduct] = useState(null);
 
+  const activeUser = user || guestUser;
+
   // Check auth status on load and handle redirect authentication
   useEffect(() => {
+    if (localStorage.getItem('foodex_guest_mode') === 'true') {
+      fetchDatabase();
+    }
+
     getRedirectResult(auth)
       .then(async (result) => {
         if (result?.user) {
@@ -54,7 +65,7 @@ export default function App() {
           console.error('Database initialization error:', dbErr);
           setError(dbErr.message || 'Failed to initialize database.');
         }
-      } else {
+      } else if (!localStorage.getItem('foodex_guest_mode')) {
         setDb(null);
       }
     });
@@ -80,7 +91,7 @@ export default function App() {
       }
     } catch (err) {
       console.error(err);
-      setError('Failed to fetch database file from Firebase.');
+      setError('Failed to fetch database file.');
     } finally {
       setLoading(false);
     }
@@ -92,7 +103,16 @@ export default function App() {
     setCurrentTab('dashboard');
   };
 
+  const handleGuestLogin = () => {
+    localStorage.setItem('foodex_guest_mode', 'true');
+    setGuestUser({ uid: 'guest-user', email: 'guest@foodex.local', displayName: 'Guest Tester' });
+    fetchDatabase();
+    setCurrentTab('dashboard');
+  };
+
   const handleLogout = () => {
+    localStorage.removeItem('foodex_guest_mode');
+    setGuestUser(null);
     dbClient.clearCredentials();
     setDb(null);
   };
@@ -109,23 +129,22 @@ export default function App() {
 
   const activeTheme = getTheme(darkMode ? 'dark' : 'light');
 
-  if (authChecking) {
+  if (authChecking && !guestUser) {
     return (
       <ThemeProvider theme={activeTheme}>
         <CssBaseline />
-        <Box sx={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', bgcolor: 'background.default', gap: 2 }}>
-          <CircularProgress size={40} />
-          <Typography variant="body2" color="text.secondary">Verifying authentication status...</Typography>
+        <Box sx={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', bgcolor: 'background.default' }}>
+          <CircularProgress color="primary" />
         </Box>
       </ThemeProvider>
     );
   }
 
-  if (!user) {
+  if (!activeUser) {
     return (
       <ThemeProvider theme={activeTheme}>
         <CssBaseline />
-        <Login onLoginSuccess={handleLoginSuccess} />
+        <Login onLoginSuccess={handleLoginSuccess} onGuestLogin={handleGuestLogin} />
       </ThemeProvider>
     );
   }

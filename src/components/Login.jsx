@@ -13,7 +13,7 @@ import { signInWithPopup, signInWithRedirect, signInAnonymously } from 'firebase
 import { auth, googleProvider } from '../utils/firebase';
 import dbClient from '../utils/dbClient';
 
-export default function Login({ onLoginSuccess }) {
+export default function Login({ onLoginSuccess, onGuestLogin }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -21,6 +21,10 @@ export default function Login({ onLoginSuccess }) {
     setError('');
     setLoading(true);
     try {
+      if (onGuestLogin) {
+        onGuestLogin();
+        return;
+      }
       await signInAnonymously(auth);
       await dbClient.initializeDbIfMissing();
       onLoginSuccess();
