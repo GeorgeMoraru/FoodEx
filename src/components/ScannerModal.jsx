@@ -218,92 +218,38 @@ export default function ScannerModal({ open, onClose, onDateScanned, settings })
     let engineUsed = '';
     let apiErrorMsg = '';
 
-    // Check for Gemini API key / Proxy in hierarchy
-    const cleanKey = (key) => {
-      if (!key) return null;
-      return key.trim().replace(/^["']|["']$/g, '');
-    };
+    // Check for Gemini Proxy URL
+    const proxyUrl = import.meta.env.VITE_VITE_GEMINI_PROXY_URL || import.meta.env.VITE_GEMINI_PROXY_URL;
 
-    const userApiKey = cleanKey(settings?.geminiApiKey || localStorage.getItem('gemini_api_key'));
-    const proxyUrl = import.meta.env.VITE_GEMINI_PROXY_URL;
-    const envApiKey = cleanKey(import.meta.env.VITE_GEMINI_API_KEY);
-    
-    const isPlaceholder = (key) => !key || key.toLowerCase().includes('your-') || key.toLowerCase().includes('placeholder');
-    const apiKey = !isPlaceholder(userApiKey) ? userApiKey : (!isPlaceholder(envApiKey) ? envApiKey : null);
-
-    if (proxyUrl || apiKey) {
+    if (proxyUrl) {
       try {
-        if (proxyUrl) {
-          const headers = { 'Content-Type': 'application/json' };
-          if (auth.currentUser) {
-            try {
-              const token = await auth.currentUser.getIdToken();
-              headers['Authorization'] = `Bearer ${token}`;
-            } catch (tokenErr) {
-              console.warn('[FoodEx Scanner] Could not retrieve Firebase ID token:', tokenErr);
-            }
-          }
-          const response = await fetch(proxyUrl, {
-            method: 'POST',
-            headers,
-            body: JSON.stringify({ data: { imageBase64: base64Data } })
-          });
-          if (response.ok) {
-            const result = await response.json();
-            rawText = result.result?.date || result.date || '';
-            if (rawText && rawText.toLowerCase() !== 'null' && rawText.toLowerCase() !== 'none') {
-              aiSuccess = true;
-              engineUsed = 'Gemini AI Proxy';
-            }
-          } else {
-            const errTxt = await response.text().catch(() => '');
-            apiErrorMsg = `Gemini Proxy error (${response.status}): ${errTxt || 'Proxy call failed'}`;
-          }
-        } else if (apiKey) {
-          const modelsToTry = ['gemini-1.5-flash', 'gemini-2.0-flash', 'gemini-1.5-pro'];
-          
-          for (const modelName of modelsToTry) {
-            try {
-              const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  contents: [{
-                    parts: [
-                      { 
-                        text: "You are an expert OCR vision system for food expiration tracking. Look at this food item packaging image. Locate any expiration date, best before date, use by date, EXP, BB, or date stamp (e.g. 2026-08-15, 15/08/2026, 15.08.26, 08/26, 15 AUG 2026). Return ONLY the date string. If no date numbers are present at all in the image, reply 'NONE'." 
-                      },
-                      { 
-                        inlineData: { mimeType: 'image/jpeg', data: base64Data } 
-                      }
-                    ]
-                  }]
-                })
-              });
-
-              if (response.ok) {
-                const data = await response.json();
-                const textOutput = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
-                if (textOutput && textOutput.toUpperCase() !== 'NONE' && textOutput.toLowerCase() !== 'null') {
-                  rawText = textOutput;
-                  aiSuccess = true;
-                  engineUsed = `${modelName} AI`;
-                  apiErrorMsg = '';
-                  break;
-                }
-              } else {
-                const errBody = await response.text().catch(() => '');
-                let jsonErr = '';
-                try { jsonErr = JSON.parse(errBody)?.error?.message; } catch (e) {}
-                apiErrorMsg = `Gemini API (${modelName}) HTTP ${response.status}: ${jsonErr || errBody || 'Request failed'}`;
-              }
-            } catch (fetchErr) {
-              apiErrorMsg = `Network error calling ${modelName}: ${fetchErr.message}`;
-            }
+        const headers = { 'Content-Type': 'application/json' };
+        if (auth.currentUser) {
+          try {
+            const token = await auth.currentUser.getIdToken();
+            headers['Authorization'] = `Bearer ${token}`;
+          } catch (tokenErr) {
+            console.warn('[FoodEx Scanner] Could not retrieve Firebase ID token:', tokenErr);
           }
         }
+        const response = await fetch(proxyUrl, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ data: { imageBase64: base64Data } })
+        });
+        if (response.ok) {
+          const result = await response.json();
+          rawText = result.result?.date || result.date || '';
+          if (rawText && rawText.toLowerCase() !== 'null' && rawText.toLowerCase() !== 'none') {
+            aiSuccess = true;
+            engineUsed = 'Gemini AI Proxy';
+          }
+        } else {
+          const errTxt = await response.text().catch(() => '');
+          apiErrorMsg = `Gemini Proxy error (${response.status}): ${errTxt || 'Proxy call failed'}`;
+        }
       } catch (geminiErr) {
-        apiErrorMsg = `Gemini request error: ${geminiErr.message}`;
+        apiErrorMsg = `Gemini proxy request error: ${geminiErr.message}`;
       }
     }
 
@@ -402,13 +348,7 @@ export default function ScannerModal({ open, onClose, onDateScanned, settings })
     }
   };
 
-  const cleanKey = (key) => {
-    if (!key) return null;
-    return key.trim().replace(/^["']|["']$/g, '');
-  };
-  const envApiKey = cleanKey(import.meta.env.VITE_GEMINI_API_KEY);
-  const isPlaceholder = (key) => !key || key.toLowerCase().includes('your-') || key.toLowerCase().includes('placeholder');
-  const hasGeminiConfigured = envApiKey && !isPlaceholder(envApiKey);
+  const hasGeminiConfigured = !!(import.meta.env.VITE_VITE_GEMINI_PROXY_URL || import.meta.env.VITE_GEMINI_PROXY_URL);
 
   return (
     <Modal open={open} onClose={onClose} closeAfterTransition aria-labelledby="scanner-modal-title">
@@ -555,7 +495,7 @@ export default function ScannerModal({ open, onClose, onDateScanned, settings })
 
             {!hasGeminiConfigured && (
               <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5, textAlign: 'center' }}>
-                💡 Tip: Set up a `VITE_GEMINI_API_KEY` in GitHub Secrets for high-accuracy AI Vision date recognition.
+                💡 Tip: Configure a `VITE_GEMINI_PROXY_URL` for high-accuracy AI Vision date recognition.
               </Typography>
             )}
           </Box>
