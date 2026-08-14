@@ -77,7 +77,7 @@ function parseReceiptLines(text) {
 
 // Gemini-based receipt parsing
 async function parseWithGemini(base64Data, apiKey) {
-  const models = ['gemini-2.0-flash', 'gemini-1.5-flash'];
+  const models = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-2.5-pro'];
   for (const model of models) {
     try {
       const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
@@ -152,7 +152,9 @@ export default function ReceiptScannerModal({ open, onClose, onItemsAdded, setti
     setError('');
 
     try {
-      const apiKey = localStorage.getItem('foodex_gemini_api_key')?.trim();
+      const localApiKey = localStorage.getItem('foodex_gemini_api_key')?.trim();
+      const envApiKey = import.meta.env.VITE_GEMINI_API_KEY?.trim();
+      const apiKey = localApiKey || envApiKey;
       let rawText = '';
 
       if (apiKey) {
