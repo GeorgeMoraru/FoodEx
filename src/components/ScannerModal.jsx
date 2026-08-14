@@ -268,7 +268,13 @@ export default function ScannerModal({ open, onClose, onDateScanned, settings })
               }
             }
           } else if (apiKey) {
-            const modelsToTry = ['gemini-flash-latest', 'gemini-3.7-flash'];
+            const modelsToTry = [
+              'gemini-2.5-flash',
+              'gemini-2.0-flash',
+              'gemini-1.5-flash',
+              'gemini-flash-latest',
+              'gemini-2.5-pro'
+            ];
             for (const modelName of modelsToTry) {
               try {
                 const response = await withTimeout(fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`, {
@@ -278,15 +284,19 @@ export default function ScannerModal({ open, onClose, onDateScanned, settings })
                     contents: [{
                       parts: [
                         { 
-                          text: "You are an expert OCR vision system for food expiration tracking. Look at this food package. Locate any expiration date, best before date, use by date, EXP, BB, or date stamp (e.g. 2026-08-15, 15/08/2026, 15.08.26, 08/26, 15 AUG 2026). Return ONLY the date string. If no date is present, return 'NONE'." 
+                          text: "Analyze this image of food packaging. Locate the expiration date, best before date, use by date, EXP date, BB date, or ink-jet date stamp (e.g., 2026-10-31, 15/08/2026, 12.04.26, 09/26, 25 OCT 2026, BEST BEFORE 14 SEP). Return ONLY the expiration date string (preferably formatted as YYYY-MM-DD if possible, or exact date text). If absolutely no date is found, reply with 'NONE'." 
                         },
                         { 
                           inlineData: { mimeType: 'image/jpeg', data: base64Data } 
                         }
                       ]
-                    }]
+                    }],
+                    generationConfig: {
+                      temperature: 0.1,
+                      maxOutputTokens: 50
+                    }
                   })
-                }), 4000);
+                }), 5000);
 
                 if (response.ok) {
                   const data = await response.json();
@@ -297,6 +307,9 @@ export default function ScannerModal({ open, onClose, onDateScanned, settings })
                     engineUsed = `Gemini AI Vision (${modelName})`;
                     break;
                   }
+                } else {
+                  const errData = await response.json().catch(() => ({}));
+                  console.warn(`[FoodEx Scanner] ${modelName} returned ${response.status}:`, errData);
                 }
               } catch (fetchErr) {
                 console.warn(`[FoodEx Scanner] ${modelName} fetch error:`, fetchErr);
@@ -403,9 +416,14 @@ export default function ScannerModal({ open, onClose, onDateScanned, settings })
         }}>
           {/* Header */}
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', p: 2, bgcolor: 'primary.main', color: '#ffffff' }}>
-            <Typography id="scanner-modal-title" variant="h6" sx={{ fontWeight: 'bold' }}>
-              Scan Expiration Date
-            </Typography>
+            <Box>
+              <Typography id="scanner-modal-title" variant="h6" sx={{ fontWeight: 'bold' }}>
+                Scan Expiration Date
+              </Typography>
+              <Typography variant="caption" sx={{ opacity: 0.9 }}>
+                {localStorage.getItem('foodex_gemini_api_key') || import.meta.env.VITE_GEMINI_API_KEY ? '✨ Gemini AI Vision Active' : '📷 Local OCR Active (Add Gemini key in Settings for AI)'}
+              </Typography>
+            </Box>
             <IconButton onClick={onClose} sx={{ color: '#ffffff' }}>
               <CloseIcon />
             </IconButton>
