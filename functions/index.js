@@ -19,10 +19,6 @@ export const extractExpirationDate = onCall(
     enforceAppCheck: false, // Enable App Check in production for extra security
   },
   async (request) => {
-    // Require authentication
-    if (!request.auth) {
-      throw new HttpsError('unauthenticated', 'Must be signed in to use the scanner.');
-    }
 
     const { imageBase64 } = request.data;
     if (!imageBase64 || typeof imageBase64 !== 'string') {

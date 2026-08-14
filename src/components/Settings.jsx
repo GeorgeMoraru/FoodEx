@@ -594,6 +594,27 @@ export default function Settings({
 
               <Divider sx={{ my: 3 }} />
 
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>✨ Gemini AI Vision (Date Scanner)</Typography>
+              </Box>
+
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                Required for high-accuracy extraction of faint dot-matrix, ink-jet, and curved packaging expiration dates. Stored locally in your browser.
+              </Typography>
+
+              <TextField
+                fullWidth
+                type="password"
+                label="Google Gemini API Key"
+                value={localGeminiKey}
+                onChange={(e) => setLocalGeminiKey(e.target.value)}
+                placeholder="AIzaSy..."
+                helperText={localGeminiKey.trim() ? '✨ Gemini AI Vision active' : 'Leave blank to use Smart Local OCR'}
+                sx={{ mb: 3 }}
+              />
+
+              <Divider sx={{ my: 3 }} />
+
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
                 <HAIcon color="primary" />
                 <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>Home Assistant Integration</Typography>

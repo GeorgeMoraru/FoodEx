@@ -265,10 +265,18 @@ export default function ScannerModal({ open, onClose, onDateScanned, settings })
         if (parsedDate && !isNaN(parsedDate.getTime())) {
           setFoundDate(parsedDate);
         } else {
-          setError('No valid expiration date found. Align the package date stamp clearly in the frame.');
+          if (!apiKey) {
+            setError('No valid expiration date found. For faint dot-matrix or ink-jet dates on jars/cartons, configure your Google Gemini API Key in Settings for AI Vision.');
+          } else {
+            setError('No valid expiration date found. Align the package date stamp clearly in the frame.');
+          }
         }
       } else {
-        setError('No date text detected. Hold the camera closer to the date stamp and ensure good lighting.');
+        if (!apiKey) {
+          setError('No date text detected with local scanner. Add your Google Gemini API Key in Settings to enable high-accuracy AI Vision for dot-matrix stamps.');
+        } else {
+          setError('No date text detected. Hold the camera closer to the date stamp and ensure good lighting.');
+        }
       }
     } catch (globalErr) {
       console.error('[FoodEx Scanner] Processing error:', globalErr);
