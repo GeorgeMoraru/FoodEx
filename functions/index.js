@@ -39,7 +39,13 @@ export const extractExpirationDate = onCall(
       throw new HttpsError('internal', 'Gemini API key not configured on server.');
     }
 
-    const modelsToTry = ['gemini-1.5-flash', 'gemini-2.0-flash', 'gemini-1.5-pro'];
+    const modelsToTry = [
+      'gemini-2.5-flash',
+      'gemini-2.0-flash',
+      'gemini-1.5-flash',
+      'gemini-2.5-pro',
+      'gemini-1.5-pro'
+    ];
     let lastError = null;
 
     for (const modelName of modelsToTry) {
@@ -53,7 +59,7 @@ export const extractExpirationDate = onCall(
               contents: [{
                 parts: [
                   {
-                    text: "Extract the expiration date from this image. Return ONLY the date in YYYY-MM-DD format. If no clear expiration date is found, return the exact word 'null'."
+                    text: "Analyze this image of food packaging. Locate any expiration date, best before date, use by date, EXP, BB, or date stamp (e.g. 2026-08-15, 15/08/2026, 15.08.26, 08/26, 15 AUG 2026). Return ONLY the date in YYYY-MM-DD format if possible, or exact date text. If no clear expiration date is found, return the exact word 'null'."
                   },
                   {
                     inlineData: {

@@ -231,8 +231,8 @@ export default function ScannerModal({ open, onClose, onDateScanned, settings })
     setFoundDate(null);
 
     try {
-      const optCanvas = getOptimizedCanvas(sourceCanvas, 960);
-      const base64Data = optCanvas.toDataURL('image/jpeg', 0.82).split(',')[1];
+      const optCanvas = getOptimizedCanvas(sourceCanvas, 1280);
+      const base64Data = optCanvas.toDataURL('image/jpeg', 0.92).split(',')[1];
 
       let rawText = '';
       let aiSuccess = false;
@@ -254,7 +254,7 @@ export default function ScannerModal({ open, onClose, onDateScanned, settings })
       // 1. Primary: Firebase Callable Cloud Function (Server-side Blaze Gemini extraction)
       try {
         const extractDateFn = httpsCallable(functions, 'extractExpirationDate');
-        const res = await withTimeout(extractDateFn({ imageBase64: base64Data }), 8000);
+        const res = await withTimeout(extractDateFn({ imageBase64: base64Data }), 10000);
         const dateResult = res.data?.date;
         if (dateResult && dateResult.toLowerCase() !== 'null' && dateResult.toLowerCase() !== 'none') {
           rawText = dateResult;
@@ -262,7 +262,10 @@ export default function ScannerModal({ open, onClose, onDateScanned, settings })
           engineUsed = 'Gemini AI Vision (Firebase)';
         }
       } catch (fnErr) {
-        console.warn('[FoodEx Scanner] Firebase Cloud Function error, checking direct fallback:', fnErr);
+        console.warn('[FoodEx Scanner] Firebase Cloud Function call error:', fnErr);
+        if (fnErr.code === 'functions/unauthenticated') {
+          console.warn('[FoodEx Scanner] User not signed into Firebase Auth; falling back to client OCR.');
+        }
       }
 
       // 2. Secondary: Fallback if proxy or key is present
