@@ -590,22 +590,7 @@ export default function Settings({
                 sx={{ mb: 3 }}
               />
 
-              <Divider sx={{ my: 3 }} />
 
-              <Typography variant="subtitle1" sx={{ fontWeight: 'bold', mb: 1 }}>Gemini AI Vision Key (Optional)</Typography>
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                Stored locally on this device. Enter your key (starts with AIzaSy...) for AI date vision, or leave blank to use the built-in local OCR engine.
-              </Typography>
-              <TextField
-                fullWidth
-                type="password"
-                label="Gemini API Key"
-                placeholder="AIzaSy..."
-                value={localGeminiKey}
-                onChange={(e) => setLocalGeminiKey(e.target.value)}
-                helperText="Stored 100% privately on your device. Never uploaded to GitHub or public servers."
-                sx={{ mb: 3 }}
-              />
 
               <Divider sx={{ my: 3 }} />
 

@@ -8,7 +8,8 @@ import {
   Close as CloseIcon, CameraAlt as CameraIcon
 } from '@mui/icons-material';
 import Tesseract from 'tesseract.js';
-import { auth } from '../utils/firebase';
+import { httpsCallable } from 'firebase/functions';
+import { auth, functions } from '../utils/firebase';
 
 export function parseDateFromText(text) {
   if (!text) return null;
@@ -250,8 +251,22 @@ export default function ScannerModal({ open, onClose, onDateScanned, settings })
       const envApiKey = cleanKey(import.meta.env.VITE_GEMINI_API_KEY);
       const apiKey = localApiKey || envApiKey;
 
-      // 1. Try Gemini AI Vision if key/proxy is present
-      if (proxyUrl || apiKey) {
+      // 1. Primary: Firebase Callable Cloud Function (Server-side Blaze Gemini extraction)
+      try {
+        const extractDateFn = httpsCallable(functions, 'extractExpirationDate');
+        const res = await withTimeout(extractDateFn({ imageBase64: base64Data }), 8000);
+        const dateResult = res.data?.date;
+        if (dateResult && dateResult.toLowerCase() !== 'null' && dateResult.toLowerCase() !== 'none') {
+          rawText = dateResult;
+          aiSuccess = true;
+          engineUsed = 'Gemini AI Vision (Firebase)';
+        }
+      } catch (fnErr) {
+        console.warn('[FoodEx Scanner] Firebase Cloud Function error, checking direct fallback:', fnErr);
+      }
+
+      // 2. Secondary: Fallback if proxy or key is present
+      if (!aiSuccess && (proxyUrl || apiKey)) {
         try {
           if (proxyUrl) {
             const response = await withTimeout(fetch(proxyUrl, {
@@ -264,17 +279,11 @@ export default function ScannerModal({ open, onClose, onDateScanned, settings })
               rawText = result.result?.date || result.date || '';
               if (rawText && rawText.toLowerCase() !== 'null' && rawText.toLowerCase() !== 'none') {
                 aiSuccess = true;
-                engineUsed = 'Gemini AI Vision';
+                engineUsed = 'Gemini AI Vision (Proxy)';
               }
             }
           } else if (apiKey) {
-            const modelsToTry = [
-              'gemini-2.5-flash',
-              'gemini-2.0-flash',
-              'gemini-1.5-flash',
-              'gemini-flash-latest',
-              'gemini-2.5-pro'
-            ];
+            const modelsToTry = ['gemini-2.0-flash', 'gemini-1.5-flash'];
             for (const modelName of modelsToTry) {
               try {
                 const response = await withTimeout(fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`, {
@@ -283,18 +292,10 @@ export default function ScannerModal({ open, onClose, onDateScanned, settings })
                   body: JSON.stringify({
                     contents: [{
                       parts: [
-                        { 
-                          text: "Analyze this image of food packaging. Locate the expiration date, best before date, use by date, EXP date, BB date, or ink-jet date stamp (e.g., 2026-10-31, 15/08/2026, 12.04.26, 09/26, 25 OCT 2026, BEST BEFORE 14 SEP). Return ONLY the expiration date string (preferably formatted as YYYY-MM-DD if possible, or exact date text). If absolutely no date is found, reply with 'NONE'." 
-                        },
-                        { 
-                          inlineData: { mimeType: 'image/jpeg', data: base64Data } 
-                        }
+                        { text: "Extract the expiration date from this image. Return ONLY the date in YYYY-MM-DD format. If no date is found, reply with 'NONE'." },
+                        { inlineData: { mimeType: 'image/jpeg', data: base64Data } }
                       ]
-                    }],
-                    generationConfig: {
-                      temperature: 0.1,
-                      maxOutputTokens: 50
-                    }
+                    }]
                   })
                 }), 5000);
 
@@ -307,17 +308,12 @@ export default function ScannerModal({ open, onClose, onDateScanned, settings })
                     engineUsed = `Gemini AI Vision (${modelName})`;
                     break;
                   }
-                } else {
-                  const errData = await response.json().catch(() => ({}));
-                  console.warn(`[FoodEx Scanner] ${modelName} returned ${response.status}:`, errData);
                 }
-              } catch (fetchErr) {
-                console.warn(`[FoodEx Scanner] ${modelName} fetch error:`, fetchErr);
-              }
+              } catch (fetchErr) {}
             }
           }
         } catch (geminiErr) {
-          console.warn('[FoodEx Scanner] Gemini error, switching to local OCR:', geminiErr);
+          console.warn('[FoodEx Scanner] Gemini direct error:', geminiErr);
         }
       }
 
@@ -421,7 +417,7 @@ export default function ScannerModal({ open, onClose, onDateScanned, settings })
                 Scan Expiration Date
               </Typography>
               <Typography variant="caption" sx={{ opacity: 0.9 }}>
-                {localStorage.getItem('foodex_gemini_api_key') || import.meta.env.VITE_GEMINI_API_KEY ? '✨ Gemini AI Vision Active' : '📷 Local OCR Active (Add Gemini key in Settings for AI)'}
+                ✨ Powered by Gemini AI Vision
               </Typography>
             </Box>
             <IconButton onClick={onClose} sx={{ color: '#ffffff' }}>
