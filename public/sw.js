@@ -1,107 +1,106 @@
-const CACHE_NAME = 'foodex-v17';
+const CACHE_NAME = 'foodex-v18';
 const STATIC_ASSETS = [
   './',
-  'index.html',
-  'foodkeeper.json',
-  'manifest.json'
+  './index.html',
+  './foodkeeper.json',
+  './manifest.json',
+  './logo.png'
 ];
 
+// ── Install: pre-cache shell ──────────────────────────────────────────────
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(STATIC_ASSETS);
+      return cache.addAll(STATIC_ASSETS).catch(() => {});
     })
   );
   self.skipWaiting();
 });
 
+// ── Activate: purge old caches ────────────────────────────────────────────
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then((cacheNames) => {
-      return Promise.all(
-        cacheNames
-          .filter((name) => name !== CACHE_NAME)
-          .map((name) => caches.delete(name))
-      );
-    })
+    caches.keys().then((names) =>
+      Promise.all(names.filter(n => n !== CACHE_NAME).map(n => caches.delete(n)))
+    )
   );
   self.clients.claim();
 });
 
+// ── Fetch: Network-first for API, Cache-first for static assets ───────────
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
-  // Don't cache API requests or external image resources
-  if (event.request.url.includes('firestore.googleapis.com') || event.request.url.includes('wikipedia.org')) return;
 
-  event.respondWith(
-    caches.match(event.request).then((cachedResponse) => {
-      if (cachedResponse) {
-        return cachedResponse;
-      }
-      return fetch(event.request).then((networkResponse) => {
-        return caches.open(CACHE_NAME).then((cache) => {
-          // Cache successful responses for our domain
-          if (networkResponse.ok && event.request.url.startsWith(self.location.origin)) {
-            cache.put(event.request, networkResponse.clone());
-          }
-          return networkResponse;
-        });
-      });
-    }).catch(() => {
-      // Fallback for offline if not in cache (e.g., return cached index for SPA routing)
-      if (event.request.mode === 'navigate') {
-        return caches.match('/');
-      }
+  const url = event.request.url;
+
+  // Never cache: Firebase, external APIs, Gemini, Wikipedia images
+  const bypassDomains = [
+    'firestore.googleapis.com',
+    'identitytoolkit.googleapis.com',
+    'generativelanguage.googleapis.com',
+    'openfoodfacts.org',
+    'wikipedia.org',
+    'wikimedia.org'
+  ];
+  if (bypassDomains.some(d => url.includes(d))) return;
+
+  // JS/CSS/HTML assets from same origin → Stale-While-Revalidate (fast + fresh)
+  if (url.startsWith(self.location.origin) || url.includes('georgemoraru.github.io/FoodEx')) {
+    event.respondWith(
+      caches.open(CACHE_NAME).then(async (cache) => {
+        const cached = await cache.match(event.request);
+        const fetchPromise = fetch(event.request).then((networkRes) => {
+          if (networkRes.ok) cache.put(event.request, networkRes.clone());
+          return networkRes;
+        }).catch(() => cached); // fall back to cache on network failure
+
+        // Return cached immediately, update in background
+        return cached || fetchPromise;
+      }).catch(() => {
+        // Offline fallback: return cached index.html for SPA navigation
+        if (event.request.mode === 'navigate') {
+          return caches.match('./index.html');
+        }
+      })
+    );
+    return;
+  }
+
+  // All other requests: network-only
+});
+
+// ── Push Notifications ────────────────────────────────────────────────────
+self.addEventListener('push', (event) => {
+  let data = { title: 'FoodEx Alert', body: 'Check your food inventory!' };
+
+  if (event.data) {
+    try { data = event.data.json(); }
+    catch (e) { data = { title: 'FoodEx Alert', body: event.data.text() }; }
+  }
+
+  event.waitUntil(
+    self.registration.showNotification(data.title, {
+      body: data.body,
+      icon: './logo.png',
+      badge: './logo.png',
+      tag: 'foodex-alert',
+      renotify: true,
+      data: { url: data.data?.url || './' }
     })
   );
 });
 
-self.addEventListener('push', (event) => {
-  let data = { title: 'FoodEx Alert', body: 'Check your food inventory!' };
-  
-  if (event.data) {
-    try {
-      data = event.data.json();
-    } catch (e) {
-      data = { title: 'FoodEx Alert', body: event.data.text() };
-    }
-  }
-
-  const options = {
-    body: data.body,
-    icon: 'data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🍎</text></svg>',
-    badge: 'data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🍎</text></svg>',
-    data: {
-      url: data.data?.url || '/#inventory'
-    }
-  };
-
-  event.waitUntil(
-    self.registration.showNotification(data.title, options)
-  );
-});
-
+// ── Notification Click ────────────────────────────────────────────────────
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  
-  const targetUrl = event.notification.data?.url || '/';
+  const targetUrl = event.notification.data?.url || './';
 
   event.waitUntil(
-    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
-      // If there's an open window, focus it and redirect
-      for (let i = 0; i < windowClients.length; i++) {
-        const client = windowClients[i];
-        if ('focus' in client) {
-          client.focus();
-          if (client.url.includes(targetUrl) || client.url.includes(location.origin)) {
-            return client.navigate(targetUrl);
-          }
-        }
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((wins) => {
+      for (const win of wins) {
+        if ('focus' in win) { win.focus(); return; }
       }
-      // Otherwise open a new window
-      if (clients.openWindow) {
-        return clients.openWindow(targetUrl);
-      }
+      if (clients.openWindow) return clients.openWindow(targetUrl);
     })
   );
 });

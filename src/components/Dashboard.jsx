@@ -9,18 +9,69 @@ import {
   Cancel as CancelIcon, Kitchen as KitchenIcon,
   CheckCircle as CheckIcon, Edit as EditIcon,
   DeleteForever as DeleteIcon, Home as HomeIcon,
-  ArrowDropDown as ArrowDropDownIcon
+  ArrowDropDown as ArrowDropDownIcon,
+  QrCodeScanner as BarcodeIcon, Receipt as ReceiptIcon
 } from '@mui/icons-material';
 import dbClient from '../utils/dbClient';
+import BarcodeScannerModal from './BarcodeScannerModal';
+import ReceiptScannerModal from './ReceiptScannerModal';
 
 export default function Dashboard({ 
   products, settings, onAddProductClick, onEditProduct, onRefresh,
   households = [], activeHouseholdId, onSwitchHousehold
 }) {
   const [expandedCard, setExpandedCard] = useState(null); // 'active', 'expiring', 'expired', or null
+  const [barcodeOpen, setBarcodeOpen] = useState(false);
+  const [receiptOpen, setReceiptOpen] = useState(false);
   const theme = useTheme();
 
   const activeHousehold = households.find(h => h.id === activeHouseholdId) || households[0] || { name: 'Main Home', id: activeHouseholdId };
+
+  const handleBarcodeProductFound = async (product) => {
+    if (!product?.name) return;
+    try {
+      await dbClient.updateDb((db) => {
+        const newProduct = {
+          id: Date.now().toString(),
+          name: product.name,
+          location: product.location || 'Pantry',
+          quantity: 1,
+          expirationDate: '',
+          status: 'ACTIVE',
+          imageUrl: product.imageUrl || '',
+          open: false
+        };
+        db.products.push(newProduct);
+        return db;
+      });
+      onRefresh();
+    } catch (err) {
+      console.error('Failed to add scanned product:', err);
+    }
+  };
+
+  const handleReceiptItemsAdded = async (items) => {
+    if (!items?.length) return;
+    try {
+      await dbClient.updateDb((db) => {
+        for (const item of items) {
+          db.products.push({
+            id: Date.now().toString() + Math.random().toString(36).substring(2, 6),
+            name: item.name,
+            location: item.location || 'Pantry',
+            quantity: item.quantity || 1,
+            expirationDate: item.expirationDate || '',
+            status: 'ACTIVE',
+            open: false
+          });
+        }
+        return db;
+      });
+      onRefresh();
+    } catch (err) {
+      console.error('Failed to add receipt items:', err);
+    }
+  };
 
   const handleUpdateStatus = async (productId, status) => {
     try {
@@ -333,14 +384,32 @@ export default function Dashboard({
             Managing food inventory for <strong>"{activeHousehold.name}"</strong>
           </Typography>
         </Box>
-        <Button 
-          variant="contained" 
-          startIcon={<AddIcon />} 
-          onClick={onAddProductClick}
-          sx={{ boxShadow: 2, fontWeight: 'bold' }}
-        >
-          Add Product
-        </Button>
+        <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+          <Button 
+            variant="outlined"
+            startIcon={<BarcodeIcon />} 
+            onClick={() => setBarcodeOpen(true)}
+            sx={{ fontWeight: 'bold' }}
+          >
+            Scan Barcode
+          </Button>
+          <Button 
+            variant="outlined"
+            startIcon={<ReceiptIcon />} 
+            onClick={() => setReceiptOpen(true)}
+            sx={{ fontWeight: 'bold' }}
+          >
+            Scan Receipt
+          </Button>
+          <Button 
+            variant="contained" 
+            startIcon={<AddIcon />} 
+            onClick={onAddProductClick}
+            sx={{ boxShadow: 2, fontWeight: 'bold' }}
+          >
+            Add Product
+          </Button>
+        </Box>
       </Box>
 
       {/* Quick Household Switcher Bar */}
@@ -482,6 +551,21 @@ export default function Dashboard({
           </Card>
         </Grid>
       </Grid>
+
+      {/* Barcode Scanner Modal */}
+      <BarcodeScannerModal
+        open={barcodeOpen}
+        onClose={() => setBarcodeOpen(false)}
+        onProductFound={handleBarcodeProductFound}
+      />
+
+      {/* Receipt Scanner Modal */}
+      <ReceiptScannerModal
+        open={receiptOpen}
+        onClose={() => setReceiptOpen(false)}
+        onItemsAdded={handleReceiptItemsAdded}
+        settings={settings}
+      />
     </Box>
   );
 }

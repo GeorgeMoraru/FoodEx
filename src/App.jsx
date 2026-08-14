@@ -23,6 +23,7 @@ export default function App() {
   const [households, setHouseholds] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [pwaInstallPrompt, setPwaInstallPrompt] = useState(null);
 
   // App navigation
   const [currentTab, setCurrentTab] = useState('dashboard');
@@ -38,6 +39,13 @@ export default function App() {
   const [editProduct, setEditProduct] = useState(null);
 
   const activeUser = user || guestUser;
+
+  // Capture PWA install prompt
+  useEffect(() => {
+    const handler = (e) => { e.preventDefault(); setPwaInstallPrompt(e); };
+    window.addEventListener('beforeinstallprompt', handler);
+    return () => window.removeEventListener('beforeinstallprompt', handler);
+  }, []);
 
   const fetchHouseholds = async () => {
     try {
@@ -279,6 +287,8 @@ export default function App() {
                       onRefresh={fetchDatabase}
                       households={households}
                       onHouseholdsChange={setHouseholds}
+                      pwaInstallPrompt={pwaInstallPrompt}
+                      onPwaInstalled={() => setPwaInstallPrompt(null)}
                     />
                   </Box>
                 </Fade>

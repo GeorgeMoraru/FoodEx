@@ -33,7 +33,8 @@ function urlBase64ToUint8Array(base64String) {
 
 export default function Settings({ 
   settings, pushSubscriptions, onRefresh, 
-  households = [], onHouseholdsChange 
+  households = [], onHouseholdsChange,
+  pwaInstallPrompt, onPwaInstalled
 }) {
   const [notificationDaysBefore, setNotificationDaysBefore] = useState(settings.notificationDaysBefore || 3);
   const [emailAlertsEnabled, setEmailAlertsEnabled] = useState(settings.emailAlertsEnabled || false);
@@ -488,6 +489,26 @@ export default function Settings({
   return (
     <Box sx={{ p: 1 }}>
       <Typography variant="h4" sx={{ fontWeight: 'bold', mb: 4 }}>Settings</Typography>
+
+      {/* PWA Install Banner */}
+      {pwaInstallPrompt && (
+        <Paper sx={{ p: 2, mb: 3, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2, flexWrap: 'wrap', bgcolor: 'success.dark', color: '#fff', borderRadius: 2 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+            <Typography sx={{ fontSize: '1.8rem' }}>📲</Typography>
+            <Box>
+              <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>Install FoodEx on Your Device</Typography>
+              <Typography variant="body2" sx={{ opacity: 0.9 }}>Add to Home Screen for instant access & offline use — no App Store required.</Typography>
+            </Box>
+          </Box>
+          <Button
+            variant="contained"
+            sx={{ bgcolor: '#fff', color: 'success.dark', fontWeight: 'bold', '&:hover': { bgcolor: '#e8f5e9' }, whiteSpace: 'nowrap' }}
+            onClick={async () => { await pwaInstallPrompt.prompt(); const { outcome } = await pwaInstallPrompt.userChoice; if (outcome === 'accepted' && onPwaInstalled) onPwaInstalled(); }}
+          >
+            Install App
+          </Button>
+        </Paper>
+      )}
 
       {/* Invitations For You Banner */}
       {myInvites.length > 0 && (
