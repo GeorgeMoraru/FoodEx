@@ -18,22 +18,39 @@ function guessLocation(categories = '', productName = '') {
   return 'Pantry';
 }
 
-// Fetch OpenFoodFacts data
+// Fetch OpenFoodFacts data with multi-endpoint fallback
 async function fetchProductByBarcode(barcode) {
-  const url = `https://world.openfoodfacts.org/api/v2/product/${barcode}.json?fields=product_name,brands,quantity,image_front_url,categories,nutriments`;
-  const res = await fetch(url);
-  if (!res.ok) throw new Error('Network error');
-  const data = await res.json();
-  if (data.status !== 1) return null;
-  const p = data.product || {};
-  return {
-    name: [p.brands, p.product_name].filter(Boolean).join(' – ') || '',
-    quantity: p.quantity || '',
-    imageUrl: p.image_front_url || '',
-    location: guessLocation(p.categories || '', p.product_name || ''),
-    rawName: p.product_name || '',
-    brand: p.brands || ''
-  };
+  const endpoints = [
+    `https://world.openfoodfacts.org/api/v2/product/${barcode}.json?fields=product_name,brands,quantity,image_front_url,categories`,
+    `https://world.openfoodfacts.org/api/v0/product/${barcode}.json`
+  ];
+
+  for (const url of endpoints) {
+    try {
+      const res = await fetch(url, {
+        headers: { 'Accept': 'application/json' }
+      });
+      if (!res.ok) continue;
+      const data = await res.json();
+      if ((data.status === 1 || data.status_verbose === 'product found') && data.product) {
+        const p = data.product;
+        const displayName = [p.brands, p.product_name || p.generic_name].filter(Boolean).join(' – ') || p.product_name || p.generic_name || '';
+        if (displayName) {
+          return {
+            name: displayName,
+            quantity: p.quantity || '',
+            imageUrl: p.image_front_url || p.image_url || '',
+            location: guessLocation(p.categories || '', displayName),
+            rawName: p.product_name || '',
+            brand: p.brands || ''
+          };
+        }
+      }
+    } catch (e) {
+      console.warn('OpenFoodFacts fetch error for url:', url, e);
+    }
+  }
+  return null;
 }
 
 export default function BarcodeScannerModal({ open, onClose, onProductFound }) {
