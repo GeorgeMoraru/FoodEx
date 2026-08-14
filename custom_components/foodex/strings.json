@@ -1,0 +1,28 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect to FoodEx",
+        "description": "Enter your FoodEx token from the FoodEx web app Settings page.",
+        "data": {
+          "token": "FoodEx Token",
+          "project_id": "Firebase Project ID (optional)",
+          "scan_interval": "Update interval (seconds)"
+        },
+        "data_description": {
+          "token": "The unique token generated in FoodEx Settings → Home Assistant Integration.",
+          "project_id": "Leave blank to use the default FoodEx project.",
+          "scan_interval": "How often to fetch updates (default: 300 seconds / 5 minutes)."
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Unable to connect to FoodEx. Please verify your token is correct.",
+      "invalid_token": "The token appears to be invalid. No data was found.",
+      "unknown": "An unexpected error occurred."
+    },
+    "abort": {
+      "already_configured": "This FoodEx token is already configured."
+    }
+  }
+}

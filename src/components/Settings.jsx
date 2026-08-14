@@ -3,7 +3,8 @@ import {
   Box, Typography, Paper, TextField, Button, Grid, 
   CircularProgress, Alert, Divider, FormControlLabel, Switch, IconButton,
   List, ListItem, ListItemText, ListItemSecondaryAction, Chip, Dialog,
-  DialogTitle, DialogContent, DialogActions
+  DialogTitle, DialogContent, DialogActions, Accordion, AccordionSummary,
+  AccordionDetails, InputAdornment
 } from '@mui/material';
 import { 
   Notifications as PushIcon, SettingsInputSvideo as HAIcon,
@@ -11,7 +12,7 @@ import {
   Delete as DeleteIcon, Group as GroupIcon, Add as AddIcon,
   MeetingRoom as LeaveIcon, Email as EmailIcon, Send as SendIcon,
   CheckCircle as AcceptIcon, Cancel as RejectIcon, Edit as EditIcon,
-  Home as HomeIcon, Check as CheckIcon
+  Home as HomeIcon, Check as CheckIcon, ExpandMore as ExpandMoreIcon
 } from '@mui/icons-material';
 import dbClient from '../utils/dbClient';
 import { getVapidPublicKey } from '../utils/vapid';
@@ -631,19 +632,88 @@ export default function Settings({
 
               {haEnabled && settings.haToken && (
                 <Box sx={{ mb: 3 }}>
-                  <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 1 }}>YAML Sensor Configuration:</Typography>
-                  
-                  <Box sx={{ position: 'relative', bgcolor: '#272822', color: '#f8f8f2', p: 2, borderRadius: 1, fontFamily: 'monospace', fontSize: '0.75rem', overflowX: 'auto' }}>
-                    <pre style={{ margin: 0 }}>{haYaml}</pre>
-                    <IconButton 
-                      size="small" 
-                      sx={{ position: 'absolute', top: 8, right: 8, color: '#f8f8f2' }}
-                      onClick={() => copyToClipboard(haYaml)}
-                    >
-                      <CopyIcon fontSize="small" />
-                    </IconButton>
-                  </Box>
-                  
+                  <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 0.5 }}>
+                    Your Private FoodEx Token:
+                  </Typography>
+                  <TextField
+                    fullWidth
+                    size="small"
+                    value={settings.haToken}
+                    InputProps={{
+                      readOnly: true,
+                      endAdornment: (
+                        <InputAdornment position="end">
+                          <IconButton 
+                            size="small" 
+                            onClick={() => copyToClipboard(settings.haToken)}
+                            title="Copy Token"
+                          >
+                            <CopyIcon fontSize="small" />
+                          </IconButton>
+                        </InputAdornment>
+                      ),
+                    }}
+                    sx={{ mb: 2, fontFamily: 'monospace' }}
+                  />
+
+                  {/* Method 1: HACS Instructions */}
+                  <Paper variant="outlined" sx={{ p: 2, mb: 2, bgcolor: 'action.hover', borderRadius: 2 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                      <Chip label="Recommended" color="primary" size="small" sx={{ fontWeight: 'bold', height: 20 }} />
+                      <Typography variant="subtitle2" sx={{ fontWeight: 'bold' }}>
+                        Method 1: 1-Click Setup via HACS
+                      </Typography>
+                    </Box>
+
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5, fontSize: '0.85rem' }}>
+                      Automatically install the integration in Home Assistant with zero YAML editing:
+                    </Typography>
+
+                    <Box component="ol" sx={{ pl: 2.5, m: 0, '& li': { mb: 1, fontSize: '0.85rem' } }}>
+                      <li>
+                        Open <strong>HACS</strong> in Home Assistant → click <strong>3 dots (top right)</strong> → <strong>Custom repositories</strong>.
+                      </li>
+                      <li>
+                        Add the FoodEx repository URL as an <strong>Integration</strong>:
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.5, mb: 0.5 }}>
+                          <Box sx={{ bgcolor: 'background.paper', px: 1, py: 0.5, borderRadius: 1, border: '1px solid', borderColor: 'divider', fontFamily: 'monospace', fontSize: '0.8rem', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            https://github.com/GeorgeMoraru/FoodEx
+                          </Box>
+                          <IconButton size="small" onClick={() => copyToClipboard('https://github.com/GeorgeMoraru/FoodEx')} title="Copy Repository URL">
+                            <CopyIcon fontSize="small" />
+                          </IconButton>
+                        </Box>
+                      </li>
+                      <li>
+                        Click <strong>Download</strong> and restart Home Assistant when prompted.
+                      </li>
+                      <li>
+                        Go to <strong>Settings → Devices & Services → Add Integration</strong>, search for <strong>FoodEx</strong>, and paste your token above.
+                      </li>
+                    </Box>
+                  </Paper>
+
+                  {/* Collapsible Manual YAML Sensor Configuration */}
+                  <Accordion variant="outlined" sx={{ bgcolor: 'transparent', '&:before': { display: 'none' } }}>
+                    <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                      <Typography variant="body2" sx={{ fontWeight: 'medium' }}>
+                        Alternative: Manual YAML Sensor Config
+                      </Typography>
+                    </AccordionSummary>
+                    <AccordionDetails sx={{ pt: 0 }}>
+                      <Box sx={{ position: 'relative', bgcolor: '#272822', color: '#f8f8f2', p: 2, borderRadius: 1, fontFamily: 'monospace', fontSize: '0.75rem', overflowX: 'auto' }}>
+                        <pre style={{ margin: 0 }}>{haYaml}</pre>
+                        <IconButton 
+                          size="small" 
+                          sx={{ position: 'absolute', top: 8, right: 8, color: '#f8f8f2' }}
+                          onClick={() => copyToClipboard(haYaml)}
+                        >
+                          <CopyIcon fontSize="small" />
+                        </IconButton>
+                      </Box>
+                    </AccordionDetails>
+                  </Accordion>
+
                   <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 2 }}>
                     <strong>Security Note:</strong> Anyone with your unique token can read your inventory summary. To revoke access, disable this setting and save.
                   </Typography>

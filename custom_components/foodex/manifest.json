@@ -1,0 +1,12 @@
+{
+  "domain": "foodex",
+  "name": "FoodEx",
+  "version": "1.0.0",
+  "documentation": "https://github.com/GeorgeMoraru/FoodEx",
+  "issue_tracker": "https://github.com/GeorgeMoraru/FoodEx/issues",
+  "dependencies": ["http"],
+  "codeowners": ["@GeorgeMoraru"],
+  "iot_class": "cloud_polling",
+  "config_flow": true,
+  "integration_type": "service"
+}
