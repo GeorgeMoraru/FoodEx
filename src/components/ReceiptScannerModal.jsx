@@ -152,9 +152,8 @@ export default function ReceiptScannerModal({ open, onClose, onItemsAdded, setti
     setError('');
 
     try {
-      const localApiKey = localStorage.getItem('foodex_gemini_api_key')?.trim();
       const envApiKey = import.meta.env.VITE_GEMINI_API_KEY?.trim();
-      const apiKey = localApiKey || envApiKey;
+      const apiKey = envApiKey;
       let rawText = '';
 
       if (apiKey) {

@@ -41,7 +41,6 @@ export default function Settings({
   const [emailAlertsEnabled, setEmailAlertsEnabled] = useState(settings.emailAlertsEnabled || false);
   const [emailAddress, setEmailAddress] = useState(settings.emailAddress || '');
   const [haEnabled, setHaEnabled] = useState(!!settings.haToken);
-  const [localGeminiKey, setLocalGeminiKey] = useState(() => localStorage.getItem('foodex_gemini_api_key') || '');
 
   const [isSubscribed, setIsSubscribed] = useState(false);
   const [notificationSupport, setNotificationSupport] = useState(true);
@@ -154,11 +153,6 @@ export default function Settings({
         return db;
       });
 
-      if (localGeminiKey.trim()) {
-        localStorage.setItem('foodex_gemini_api_key', localGeminiKey.trim());
-      } else {
-        localStorage.removeItem('foodex_gemini_api_key');
-      }
 
       setSuccess('Settings updated successfully!');
       onRefresh();
@@ -599,19 +593,8 @@ export default function Settings({
               </Box>
 
               <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                Required for high-accuracy extraction of faint dot-matrix, ink-jet, and curved packaging expiration dates. Stored locally in your browser.
+                High-accuracy AI date extraction is managed securely server-side via Google Cloud Functions. No local API key required.
               </Typography>
-
-              <TextField
-                fullWidth
-                type="password"
-                label="Google Gemini API Key"
-                value={localGeminiKey}
-                onChange={(e) => setLocalGeminiKey(e.target.value)}
-                placeholder="AIzaSy..."
-                helperText={localGeminiKey.trim() ? '✨ Gemini AI Vision active' : 'Leave blank to use Smart Local OCR'}
-                sx={{ mb: 3 }}
-              />
 
               <Divider sx={{ my: 3 }} />
 

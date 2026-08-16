@@ -30,5 +30,8 @@
     "nodemailer": "^6.9.13",
     "vite": "^5.1.4",
     "web-push": "^3.6.7"
+  },
+  "optionalDependencies": {
+    "@rollup/rollup-linux-x64-gnu": "^4.62.4"
   }
 }

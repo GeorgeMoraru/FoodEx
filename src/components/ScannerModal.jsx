@@ -144,10 +144,9 @@ export default function ScannerModal({ open, onClose, onDateScanned, settings })
         return !isPlaceholder ? trimmed : null;
       };
 
-      const localApiKey = cleanKey(localStorage.getItem('foodex_gemini_api_key'));
       const proxyUrl = import.meta.env.VITE_GEMINI_PROXY_URL;
       const envApiKey = cleanKey(import.meta.env.VITE_GEMINI_API_KEY);
-      const apiKey = localApiKey || envApiKey;
+      const apiKey = envApiKey;
 
       // 1. Primary: Firebase Callable Cloud Function (Server-side Blaze Gemini extraction)
       try {
