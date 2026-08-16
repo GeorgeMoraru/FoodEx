@@ -147,7 +147,7 @@ export default function ScannerModal({ open, onClose, onDateScanned, settings })
       const serverProxyUrl = import.meta.env.VITE_GEMINI_PROXY_URL || (
         typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
           ? 'http://localhost:8765/api/extract-date'
-          : `http://${window.location.hostname || '192.168.68.80'}:8765/api/extract-date`
+          : 'https://themeanmachine.taild1868e.ts.net:10006/api/extract-date'
       );
 
       // 1. Primary: Server AI Proxy (Zero Firebase Blaze / Zero credit card required)

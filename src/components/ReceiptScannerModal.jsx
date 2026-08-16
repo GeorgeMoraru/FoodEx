@@ -155,7 +155,7 @@ export default function ReceiptScannerModal({ open, onClose, onItemsAdded, setti
       const serverProxyUrl = import.meta.env.VITE_GEMINI_RECEIPT_PROXY_URL || (
         typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
           ? 'http://localhost:8765/api/parse-receipt'
-          : `http://${window.location.hostname || '192.168.68.80'}:8765/api/parse-receipt`
+          : 'https://themeanmachine.taild1868e.ts.net:10006/api/parse-receipt'
       );
       let rawText = '';
 
