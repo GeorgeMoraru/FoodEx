@@ -386,22 +386,6 @@ export default function Dashboard({
         </Box>
         <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
           <Button 
-            variant="outlined"
-            startIcon={<BarcodeIcon />} 
-            onClick={() => setBarcodeOpen(true)}
-            sx={{ fontWeight: 'bold' }}
-          >
-            Scan Barcode
-          </Button>
-          <Button 
-            variant="outlined"
-            startIcon={<ReceiptIcon />} 
-            onClick={() => setReceiptOpen(true)}
-            sx={{ fontWeight: 'bold' }}
-          >
-            Scan Receipt
-          </Button>
-          <Button 
             variant="contained" 
             startIcon={<AddIcon />} 
             onClick={onAddProductClick}
