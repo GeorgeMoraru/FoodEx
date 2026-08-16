@@ -11,6 +11,7 @@ import Tesseract from 'tesseract.js';
 import { httpsCallable } from 'firebase/functions';
 import { auth, functions } from '../utils/firebase';
 import { parseDateFromText, preprocessCanvasVariants } from '../utils/dateExtractor';
+import logger from '../utils/logger';
 
 export { parseDateFromText };
 
@@ -267,8 +268,8 @@ export default function ScannerModal({ open, onClose, onDateScanned, settings })
       setScanEngine(engineUsed || 'Local Scanner');
 
       // 4. Parse date from output
+      let parsedDate = null;
       if (rawText) {
-        let parsedDate = null;
         if (rawText.match(/^\d{4}-\d{2}-\d{2}$/)) {
           parsedDate = new Date(rawText);
         } else {
@@ -291,9 +292,20 @@ export default function ScannerModal({ open, onClose, onDateScanned, settings })
           setError('No date text detected. Hold the camera closer to the date stamp and ensure good lighting.');
         }
       }
+
+      // Log the captured photo and extraction telemetry
+      logger.logScanAttempt({
+        dataUrl: base64Data ? `data:image/jpeg;base64,${base64Data}` : null,
+        extractedDate: parsedDate ? parsedDate.toISOString().split('T')[0] : (rawText || null),
+        engine: engineUsed || 'Local Scanner',
+        success: !!parsedDate,
+        error: !parsedDate ? (rawText ? 'Unrecognized date format' : 'No text detected') : null
+      });
+
     } catch (globalErr) {
       console.error('[FoodEx Scanner] Processing error:', globalErr);
       setError('Scan could not complete. Please hold steady and try again.');
+      logger.error('Scan processing failure:', globalErr);
     } finally {
       setLoading(false);
     }
