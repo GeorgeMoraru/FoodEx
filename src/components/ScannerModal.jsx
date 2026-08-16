@@ -135,30 +135,35 @@ export default function ScannerModal({ open, onClose, onDateScanned, settings })
         return !isPlaceholder ? trimmed : null;
       };
 
-      const serverProxyUrl = import.meta.env.VITE_GEMINI_PROXY_URL || (
-        typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
-          ? 'http://localhost:8765/api/extract-date'
-          : 'https://themeanmachine.taild1868e.ts.net:10006/api/extract-date'
-      );
+      const proxyEndpoints = [
+        import.meta.env.VITE_GEMINI_PROXY_URL,
+        'https://themeanmachine.taild1868e.ts.net/projectsproxi/api/extract-date',
+        'https://themeanmachine.taild1868e.ts.net/foodex/api/extract-date',
+        'https://themeanmachine.taild1868e.ts.net:10006/api/extract-date',
+        'http://localhost:8765/api/extract-date'
+      ].filter(Boolean);
 
       // 1. Primary: Server AI Proxy (Zero Firebase Blaze / Zero credit card required)
-      try {
-        const response = await withTimeout(fetch(serverProxyUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ imageBase64: base64Data })
-        }), 8000);
-        if (response.ok) {
-          const result = await response.json();
-          const dateResult = result.date || result.result?.date;
-          if (dateResult && dateResult.toLowerCase() !== 'null' && dateResult.toLowerCase() !== 'none') {
-            rawText = dateResult;
-            aiSuccess = true;
-            engineUsed = 'Gemini AI Vision (Server)';
+      for (const endpoint of proxyEndpoints) {
+        try {
+          const response = await withTimeout(fetch(endpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ imageBase64: base64Data })
+          }), 7000);
+          if (response.ok) {
+            const result = await response.json();
+            const dateResult = result.date || result.result?.date;
+            if (dateResult && dateResult.toLowerCase() !== 'null' && dateResult.toLowerCase() !== 'none') {
+              rawText = dateResult;
+              aiSuccess = true;
+              engineUsed = 'Gemini AI Vision (Server)';
+              break;
+            }
           }
+        } catch (proxyErr) {
+          console.warn(`[FoodEx Scanner] Proxy endpoint error (${endpoint}):`, proxyErr);
         }
-      } catch (proxyErr) {
-        console.warn('[FoodEx Scanner] Server proxy error, checking fallbacks:', proxyErr);
       }
 
       // 2. Secondary: Firebase Callable Cloud Function (if deployed)
