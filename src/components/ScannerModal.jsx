@@ -119,19 +119,9 @@ export default function ScannerModal({ open, onClose, onDateScanned, settings })
     setFoundDate(null);
 
     try {
-      // Focus on the viewfinder area (middle 80% width x 70% height) where user aligns the stamp
-      const cropCanvas = document.createElement('canvas');
-      const cropX = Math.round(sourceCanvas.width * 0.1);
-      const cropY = Math.round(sourceCanvas.height * 0.15);
-      const cropW = Math.round(sourceCanvas.width * 0.8);
-      const cropH = Math.round(sourceCanvas.height * 0.7);
-      cropCanvas.width = cropW;
-      cropCanvas.height = cropH;
-      const cropCtx = cropCanvas.getContext('2d');
-      cropCtx.drawImage(sourceCanvas, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
-
-      const optCanvas = getOptimizedCanvas(cropCanvas, 1280);
-      const base64Data = optCanvas.toDataURL('image/jpeg', 0.94).split(',')[1];
+      // Send full high-resolution packaging image without aggressive cropping
+      const optCanvas = getOptimizedCanvas(sourceCanvas, 1600);
+      const base64Data = optCanvas.toDataURL('image/jpeg', 0.92).split(',')[1];
 
       let rawText = '';
       let aiSuccess = false;
