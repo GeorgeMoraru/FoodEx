@@ -33,12 +33,22 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN][entry.entry_id] = coordinator
 
-    # Register the bundled Lovelace card as a static resource
-    hass.http.register_static_path(
-        "/foodex/foodex-card.js",
-        hass.config.path("custom_components/foodex/www/foodex-card.js"),
-        cache_headers=False,
-    )
+    # Register the bundled Lovelace card as a static resource (HA modern & legacy compatibility)
+    card_path = hass.config.path("custom_components/foodex/www/foodex-card.js")
+    if hasattr(hass.http, "async_register_static_paths"):
+        try:
+            from homeassistant.components.http import StaticPathConfig
+            await hass.http.async_register_static_paths(
+                [StaticPathConfig("/foodex/foodex-card.js", card_path, cache_headers=False)]
+            )
+        except Exception as e:
+            _LOGGER.debug("Could not register static path via async_register_static_paths: %s", e)
+    elif hasattr(hass.http, "register_static_path"):
+        hass.http.register_static_path(
+            "/foodex/foodex-card.js",
+            card_path,
+            cache_headers=False,
+        )
 
     # Add the card to Lovelace resources so users can find it in the card picker
     await hass.async_add_executor_job(
