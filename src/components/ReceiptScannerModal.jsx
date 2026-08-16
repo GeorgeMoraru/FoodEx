@@ -152,18 +152,30 @@ export default function ReceiptScannerModal({ open, onClose, onItemsAdded, setti
     setError('');
 
     try {
-      const envApiKey = import.meta.env.VITE_GEMINI_API_KEY?.trim();
-      const apiKey = envApiKey;
+      const serverProxyUrl = import.meta.env.VITE_GEMINI_RECEIPT_PROXY_URL || (
+        typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+          ? 'http://localhost:8765/api/parse-receipt'
+          : `http://${window.location.hostname || '192.168.68.80'}:8765/api/parse-receipt`
+      );
       let rawText = '';
 
-      if (apiKey) {
-        setEngine('Gemini AI Vision');
+      try {
+        setEngine('Gemini AI Vision (Server)');
         setProgress(30);
-        const geminiText = await parseWithGemini(imageData, apiKey);
-        if (geminiText) {
-          rawText = geminiText;
-          setProgress(70);
+        const resp = await fetch(serverProxyUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ imageBase64: imageData })
+        });
+        if (resp.ok) {
+          const res = await resp.json();
+          if (res.text) {
+            rawText = res.text;
+            setProgress(75);
+          }
         }
+      } catch (proxyErr) {
+        console.warn('[ReceiptScanner] Server proxy error, falling back to Local OCR:', proxyErr);
       }
 
       if (!rawText) {
